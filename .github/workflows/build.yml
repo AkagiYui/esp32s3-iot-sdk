@@ -1,0 +1,119 @@
+name: Build Firmware
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ESP32-S3 Firmware & Web
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:v5.5.3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ESP-IDF 容器是 Ubuntu，手动装 Node.js + pnpm
+      - name: Install Node.js and pnpm
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+          apt-get install -y --no-install-recommends nodejs
+          corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Get pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ hashFiles('embed-web/pnpm-lock.yaml') }}
+          restore-keys: pnpm-
+
+      # joltwallet/littlefs 等托管组件，按 idf_component.yml 缓存
+      - name: Cache IDF managed components
+        uses: actions/cache@v4
+        with:
+          path: managed_components
+          key: idf-managed-${{ hashFiles('main/idf_component.yml') }}
+
+      - name: Install web dependencies
+        working-directory: embed-web
+        run: pnpm install --frozen-lockfile
+
+      # 单步完成：pnpm build（CMake build_web target）+ 固件 + merged bin
+      - name: Build firmware, web and merged binary
+        run: |
+          . $IDF_PATH/export.sh
+          idf.py build
+          cmake --build build --target merged_bin
+
+      - name: Collect release artifacts
+        run: |
+          PROJECT=$(python3 -c "import json; print(json.load(open('build/project_description.json'))['project_name'])")
+
+          mkdir -p release
+
+          cp build/bootloader/bootloader.bin               release/
+          cp build/partition_table/partition-table.bin     release/
+          cp build/ota_data_initial.bin                    release/
+          cp build/${PROJECT}.bin                          release/
+          cp build/web.bin                                 release/
+          cp build/${PROJECT}-merged.bin                   release/
+          cp build/flasher_args.json                       release/
+          cp -r embed-web/dist                             release/web-dist
+
+          # 生成可读的烧录说明（含偏移地址表 + esptool 命令）
+          GITHUB_SHA="${{ github.sha }}" python3 - <<'EOF'
+          import json, os
+
+          with open('build/flasher_args.json') as f:
+              args = json.load(f)
+
+          project  = json.load(open('build/project_description.json'))['project_name']
+          s        = args['flash_settings']
+          chip     = args['extra_esptool_args']['chip']
+          sha      = os.environ.get('GITHUB_SHA', 'unknown')[:8]
+          flags    = f"--chip {chip} --flash_mode {s['flash_mode']} --flash_size {s['flash_size']} --flash_freq {s['flash_freq']}"
+          files    = sorted(args['flash_files'].items(), key=lambda x: int(x[0], 16))
+
+          md = [
+              f"# Flash Instructions\n\n",
+              f"> Commit: `{sha}`\n\n",
+              "## Prerequisites\n\n```bash\npip install esptool\n```\n\n",
+              "## 单分区烧录\n\n",
+              "| 文件 | 偏移地址 |\n|------|----------|\n",
+          ]
+          for offset, fpath in files:
+              md.append(f"| `{fpath.split('/')[-1]}` | `{offset}` |\n")
+
+          md.append("\n```bash\n")
+          for offset, fpath in files:
+              md.append(f"esptool.py {flags} write_flash {offset} {fpath.split('/')[-1]}\n")
+          md.append("```\n\n")
+
+          md += [
+              "## 全量烧录（新板初始化）\n\n",
+              "```bash\n",
+              f"esptool.py {flags} write_flash 0x0 {project}-merged.bin\n",
+              "```\n",
+          ]
+
+          with open('release/FLASH_INSTRUCTIONS.md', 'w') as f:
+              f.writelines(md)
+
+          print("Artifacts:")
+          for name in sorted(os.listdir('release')):
+              print(f"  {name:45s} {os.path.getsize('release/' + name):>10,} B")
+          EOF
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ github.sha }}
+          path: release/
+          retention-days: 30
+
