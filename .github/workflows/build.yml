@@ -13,7 +13,7 @@ jobs:
       image: espressif/idf:v5.5.3
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # ESP-IDF 容器是 Ubuntu，手动装 Node.js + pnpm
       - name: Install Node.js and pnpm
@@ -27,7 +27,7 @@ jobs:
         run: echo "path=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
 
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: pnpm-${{ hashFiles('embed-web/pnpm-lock.yaml') }}
@@ -35,7 +35,7 @@ jobs:
 
       # joltwallet/littlefs 等托管组件，按 idf_component.yml 缓存
       - name: Cache IDF managed components
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: managed_components
           key: idf-managed-${{ hashFiles('main/idf_component.yml') }}
@@ -111,7 +111,7 @@ jobs:
           EOF
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ github.sha }}
           path: release/
