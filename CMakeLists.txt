@@ -25,3 +25,33 @@ littlefs_create_partition_image(web ${EMBED_WEB_DIR}/dist
     FLASH_IN_PROJECT
     DEPENDS build_web
 )
+
+# ---- Merged Binary（新板初始化用）----
+# 从分区表动态读取各分区偏移，避免硬编码
+partition_table_get_partition_info(factory_offset "--partition-name factory" "offset")
+partition_table_get_partition_info(otadata_offset "--partition-name otadata" "offset")
+partition_table_get_partition_info(web_offset     "--partition-name web"     "offset")
+
+idf_build_get_property(python PYTHON)
+
+set(MERGED_BIN ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}-merged.bin)
+
+# 将 bootloader + 分区表 + otadata + 固件 + web 合并为单个 bin
+# 用法: cmake --build build --target merged_bin
+add_custom_target(merged_bin
+    COMMAND ${python} -m esptool
+        --chip esp32s3
+        merge_bin
+        --output     ${MERGED_BIN}
+        --flash_mode ${CONFIG_ESPTOOLPY_FLASHMODE}
+        --flash_size ${CONFIG_ESPTOOLPY_FLASHSIZE}
+        --flash_freq ${CONFIG_ESPTOOLPY_FLASHFREQ}
+        0x0               ${CMAKE_BINARY_DIR}/bootloader/bootloader.bin
+        0x8000            ${CMAKE_BINARY_DIR}/partition_table/partition-table.bin
+        ${otadata_offset} ${CMAKE_BINARY_DIR}/ota_data_initial.bin
+        ${factory_offset} ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin
+        ${web_offset}     ${CMAKE_BINARY_DIR}/web.bin
+    DEPENDS app bootloader partition_table littlefs_web_bin
+    COMMENT "Generating merged binary: ${CMAKE_PROJECT_NAME}-merged.bin"
+    VERBATIM
+)
