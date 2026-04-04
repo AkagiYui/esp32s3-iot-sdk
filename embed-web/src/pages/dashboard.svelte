@@ -1,14 +1,17 @@
 <script module lang="ts">
   import type { RouteMeta } from "@/lib/route-manifest";
+  import { LayoutDashboard } from "lucide-svelte";
 
   export const routeMeta: RouteMeta = {
     label: "仪表盘",
-    icon: "dashboard",
+    icon: LayoutDashboard,
     order: 1,
   };
 </script>
 
 <script lang="ts">
+  import { Lightbulb, Sun, BarChart3, Radio } from "lucide-svelte";
+
   let ledOn = $state(false);
   let brightness = $state(75);
 </script>
@@ -22,7 +25,7 @@
   <div class="control-list">
     <div class="control-item">
       <div class="control-info">
-        <span class="control-icon">💡</span>
+        <span class="control-icon"><Lightbulb size={24} /></span>
         <div>
           <h3>LED 灯</h3>
           <p>{ledOn ? "已开启" : "已关闭"}</p>
@@ -40,7 +43,7 @@
 
     <div class="control-item">
       <div class="control-info">
-        <span class="control-icon">🔆</span>
+        <span class="control-icon"><Sun size={24} /></span>
         <div>
           <h3>亮度</h3>
           <p>{brightness}%</p>
@@ -57,7 +60,7 @@
 
     <div class="control-item">
       <div class="control-info">
-        <span class="control-icon">📊</span>
+        <span class="control-icon"><BarChart3 size={24} /></span>
         <div>
           <h3>内存使用</h3>
           <p>124 KB / 320 KB</p>
@@ -70,7 +73,7 @@
 
     <div class="control-item">
       <div class="control-info">
-        <span class="control-icon">📡</span>
+        <span class="control-icon"><Radio size={24} /></span>
         <div>
           <h3>RSSI 信号</h3>
           <p>-42 dBm</p>
@@ -115,7 +118,8 @@
     gap: 12px;
   }
   .control-icon {
-    font-size: 24px;
+    color: var(--accent);
+    line-height: 0;
   }
   .control-info h3 {
     margin: 0;

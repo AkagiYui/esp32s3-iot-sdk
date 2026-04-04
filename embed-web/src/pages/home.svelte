@@ -1,11 +1,16 @@
 <script module lang="ts">
   import type { RouteMeta } from "@/lib/route-manifest";
+  import { House } from "lucide-svelte";
 
   export const routeMeta: RouteMeta = {
     label: "首页",
-    icon: "home",
+    icon: House,
     order: 0,
   };
+</script>
+
+<script lang="ts">
+  import { Wifi, Thermometer, Droplets, Clock } from "lucide-svelte";
 </script>
 
 <div class="page">
@@ -16,7 +21,7 @@
 
   <div class="card-grid">
     <div class="card">
-      <div class="card-icon">📶</div>
+      <div class="card-icon"><Wifi size={28} /></div>
       <div class="card-body">
         <h3>WiFi 状态</h3>
         <p class="status online">已连接</p>
@@ -24,7 +29,7 @@
     </div>
 
     <div class="card">
-      <div class="card-icon">🌡️</div>
+      <div class="card-icon"><Thermometer size={28} /></div>
       <div class="card-body">
         <h3>温度</h3>
         <p class="value">24.5°C</p>
@@ -32,7 +37,7 @@
     </div>
 
     <div class="card">
-      <div class="card-icon">💧</div>
+      <div class="card-icon"><Droplets size={28} /></div>
       <div class="card-body">
         <h3>湿度</h3>
         <p class="value">62%</p>
@@ -40,7 +45,7 @@
     </div>
 
     <div class="card">
-      <div class="card-icon">⏱️</div>
+      <div class="card-icon"><Clock size={28} /></div>
       <div class="card-body">
         <h3>运行时间</h3>
         <p class="value">3h 24m</p>
@@ -76,7 +81,8 @@
     gap: 8px;
   }
   .card-icon {
-    font-size: 28px;
+    color: var(--accent);
+    line-height: 0;
   }
   .card-body h3 {
     margin: 0;

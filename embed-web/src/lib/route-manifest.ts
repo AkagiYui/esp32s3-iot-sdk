@@ -1,14 +1,13 @@
-import type { Component } from 'svelte';
+import type { Component, ComponentType } from 'svelte';
+import { House } from 'lucide-svelte';
 
 type PageModule = {
   default: Component;
   routeMeta?: RouteMeta;
 };
 
-export type RouteIcon = 'home' | 'dashboard' | 'settings';
-
 export type RouteMeta = {
-  icon: RouteIcon;
+  icon: ComponentType;
   label: string;
   order: number;
 };
@@ -16,7 +15,7 @@ export type RouteMeta = {
 export type RouteEntry = {
   component: Component;
   filePath: string;
-  icon: RouteIcon;
+  icon: ComponentType;
   label: string;
   order: number;
   path: string;
@@ -71,7 +70,7 @@ function defaultLabelFromPath(path: string): string {
 
 function defaultMeta(path: string): RouteMeta {
   return {
-    icon: 'home',
+    icon: House,
     label: defaultLabelFromPath(path),
     order: 999,
   };

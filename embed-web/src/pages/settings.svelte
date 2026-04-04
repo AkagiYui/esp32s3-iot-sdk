@@ -1,9 +1,10 @@
 <script module lang="ts">
   import type { RouteMeta } from "@/lib/route-manifest";
+  import { Settings } from "lucide-svelte";
 
   export const routeMeta: RouteMeta = {
     label: "设置",
-    icon: "settings",
+    icon: Settings,
     order: 2,
   };
 </script>
