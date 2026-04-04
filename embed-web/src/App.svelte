@@ -1,4 +1,5 @@
 <script lang="ts">
+  import "./lib/theme.svelte";
   import { getCurrentRouteEntry } from "./lib/router.svelte";
   import BottomNav from "./components/BottomNav.svelte";
 

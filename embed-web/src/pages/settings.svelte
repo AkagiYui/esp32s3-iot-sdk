@@ -10,13 +10,49 @@
 </script>
 
 <script lang="ts">
+  import {
+    getThemeMode,
+    setThemeMode,
+    type ThemeMode,
+  } from "@/lib/theme.svelte";
+  import { Sun, Moon, Monitor } from "lucide-svelte";
+
   let deviceName = $state("ESP32-S3-IoT");
+
+  const themeOptions: { value: ThemeMode; label: string; icon: typeof Sun }[] =
+    [
+      { value: "system", label: "跟随系统", icon: Monitor },
+      { value: "light", label: "亮色", icon: Sun },
+      { value: "dark", label: "暗色", icon: Moon },
+    ];
 </script>
 
 <div class="page">
   <div class="page-header">
     <h1>设置</h1>
     <p class="subtitle">设备配置</p>
+  </div>
+
+  <div class="settings-group">
+    <h2 class="group-title">外观</h2>
+    <div class="settings-list">
+      <div class="setting-item">
+        <span class="setting-label">主题模式</span>
+        <div class="theme-picker">
+          {#each themeOptions as opt}
+            <button
+              class="theme-btn"
+              class:active={getThemeMode() === opt.value}
+              onclick={() => setThemeMode(opt.value)}
+              aria-label={opt.label}
+            >
+              <opt.icon size={16} />
+              <span>{opt.label}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="settings-group">
@@ -149,5 +185,33 @@
   }
   .btn.danger {
     background: #ef4444;
+  }
+  .theme-picker {
+    display: flex;
+    gap: 4px;
+    background: var(--border);
+    border-radius: 8px;
+    padding: 3px;
+  }
+  .theme-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .theme-btn.active {
+    background: var(--card-bg);
+    color: var(--accent);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 </style>
