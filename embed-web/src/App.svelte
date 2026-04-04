@@ -1,89 +1,85 @@
-<script>
-  import svelteLogo from './assets/svelte.svg'
-  import viteLogo from './assets/vite.svg'
-  import heroImg from './assets/hero.png'
-  import Counter from './lib/Counter.svelte'
+<script lang="ts">
+  import { getRoute } from "./lib/router.svelte";
+  import BottomNav from "./lib/BottomNav.svelte";
+  import Home from "./pages/Home.svelte";
+  import Dashboard from "./pages/Dashboard.svelte";
+  import Settings from "./pages/Settings.svelte";
 </script>
 
-<section id="center">
-  <div class="hero">
-    <img src={heroImg} class="base" width="170" height="179" alt="" />
-    <img src={svelteLogo} class="framework" alt="Svelte logo" />
-    <img src={viteLogo} class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/App.svelte</code> and save to test <code>HMR</code></p>
-  </div>
-  <Counter />
-</section>
+<svelte:head>
+  <title>ESP32-S3 控制台</title>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+</svelte:head>
 
-<div class="ticks"></div>
+<div class="shell">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">ESP32-S3 Embedded Web</p>
+      <h1>掌上设备控制台</h1>
+    </div>
+    <div class="status-pill">在线</div>
+  </header>
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#documentation-icon"></use>
-    </svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank" rel="noreferrer">
-          <img class="logo" src={viteLogo} alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://svelte.dev/" target="_blank" rel="noreferrer">
-          <img class="button-icon" src={svelteLogo} alt="" />
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#social-icon"></use>
-    </svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li>
-        <a href="https://github.com/vitejs/vite" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#github-icon"></use>
-          </svg>
-          GitHub
-        </a>
-      </li>
-      <li>
-        <a href="https://chat.vite.dev/" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#discord-icon"></use>
-          </svg>
-          Discord
-        </a>
-      </li>
-      <li>
-        <a href="https://x.com/vite_js" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#x-icon"></use>
-          </svg>
-          X.com
-        </a>
-      </li>
-      <li>
-        <a href="https://bsky.app/profile/vite.dev" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#bluesky-icon"></use>
-          </svg>
-          Bluesky
-        </a>
-      </li>
-    </ul>
-  </div>
-</section>
+  <main class="app-content">
+    {#if getRoute() === "/"}
+      <Home />
+    {:else if getRoute() === "/dashboard"}
+      <Dashboard />
+    {:else if getRoute() === "/settings"}
+      <Settings />
+    {/if}
+  </main>
 
-<div class="ticks"></div>
-<section id="spacer"></section>
+  <BottomNav />
+</div>
+
+<style>
+  .shell {
+    min-height: 100dvh;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px 16px calc(92px + env(safe-area-inset-bottom));
+    box-sizing: border-box;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .eyebrow {
+    margin: 0 0 6px;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .topbar h1 {
+    margin: 0;
+    font-size: 28px;
+    line-height: 1.05;
+  }
+
+  .status-pill {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: rgba(43, 122, 120, 0.12);
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .app-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+</style>
