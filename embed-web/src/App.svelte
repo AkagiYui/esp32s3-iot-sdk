@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getCurrentRouteEntry } from "./lib/router.svelte";
-  import BottomNav from "./lib/BottomNav.svelte";
+  import BottomNav from "./components/BottomNav.svelte";
 
   const fallbackMessage = "页面加载失败";
 </script>

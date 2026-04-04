@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { routeEntries } from "./route-manifest";
-  import { getRoute, navigate, type Route } from "./router.svelte";
+  import { routeEntries } from "../lib/route-manifest";
+  import { getRoute, navigate, type Route } from "../lib/router.svelte";
 </script>
 
 <nav class="bottom-nav">
