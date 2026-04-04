@@ -10,7 +10,7 @@
 </script>
 
 <script lang="ts">
-  import { Lightbulb, Sun, BarChart3, Radio } from "lucide-svelte";
+  import { Lightbulb, Sun, ChartColumn, Radio } from "lucide-svelte";
 
   let ledOn = $state(false);
   let brightness = $state(75);
@@ -60,7 +60,7 @@
 
     <div class="control-item">
       <div class="control-info">
-        <span class="control-icon"><BarChart3 size={24} /></span>
+        <span class="control-icon"><ChartColumn size={24} /></span>
         <div>
           <h3>内存使用</h3>
           <p>124 KB / 320 KB</p>
