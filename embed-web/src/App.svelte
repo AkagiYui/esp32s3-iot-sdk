@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { getRoute } from "./lib/router.svelte";
+  import { getCurrentRouteEntry } from "./lib/router.svelte";
   import BottomNav from "./lib/BottomNav.svelte";
-  import Home from "./pages/Home.svelte";
-  import Dashboard from "./pages/Dashboard.svelte";
-  import Settings from "./pages/Settings.svelte";
+
+  const fallbackMessage = "页面加载失败";
 </script>
 
 <svelte:head>
@@ -24,12 +23,10 @@
   </header>
 
   <main class="app-content">
-    {#if getRoute() === "/"}
-      <Home />
-    {:else if getRoute() === "/dashboard"}
-      <Dashboard />
-    {:else if getRoute() === "/settings"}
-      <Settings />
+    {#if getCurrentRouteEntry()}
+      <svelte:component this={getCurrentRouteEntry()?.component} />
+    {:else}
+      <section class="route-error">{fallbackMessage}</section>
     {/if}
   </main>
 
@@ -81,5 +78,14 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+
+  .route-error {
+    padding: 24px 16px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--card-bg);
+    color: var(--muted);
+    text-align: center;
   }
 </style>

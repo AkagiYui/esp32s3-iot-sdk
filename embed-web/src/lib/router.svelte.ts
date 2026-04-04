@@ -1,11 +1,12 @@
-const routes = ['/', '/dashboard', '/settings'] as const;
-export type Route = (typeof routes)[number];
+import { routeMap, routePaths } from './route-manifest';
+
+export type Route = (typeof routePaths)[number];
 
 let current = $state<Route>(parseHash());
 
 function parseHash(): Route {
   const hash = window.location.hash.slice(1) || '/';
-  return routes.includes(hash as Route) ? (hash as Route) : '/';
+  return routeMap.has(hash) ? (hash as Route) : '/';
 }
 
 window.addEventListener('hashchange', () => {
@@ -18,4 +19,8 @@ export function navigate(path: Route) {
 
 export function getRoute(): Route {
   return current;
+}
+
+export function getCurrentRouteEntry() {
+  return routeMap.get(current) ?? routeMap.get('/');
 }

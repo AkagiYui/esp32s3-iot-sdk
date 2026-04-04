@@ -1,3 +1,13 @@
+<script module lang="ts">
+  import type { RouteMeta } from '../lib/route-manifest';
+
+  export const routeMeta: RouteMeta = {
+    label: '仪表盘',
+    icon: 'dashboard',
+    order: 1,
+  };
+</script>
+
 <script lang="ts">
   let ledOn = $state(false);
   let brightness = $state(75);
@@ -15,7 +25,7 @@
         <span class="control-icon">💡</span>
         <div>
           <h3>LED 灯</h3>
-          <p>{ledOn ? "已开启" : "已关闭"}</p>
+          <p>{ledOn ? '已开启' : '已关闭'}</p>
         </div>
       </div>
       <button
@@ -36,13 +46,7 @@
           <p>{brightness}%</p>
         </div>
       </div>
-      <input
-        type="range"
-        min="0"
-        max="100"
-        bind:value={brightness}
-        class="slider"
-      />
+      <input type="range" min="0" max="100" bind:value={brightness} class="slider" />
     </div>
 
     <div class="control-item">
@@ -118,8 +122,6 @@
     font-size: 13px;
     color: var(--text);
   }
-
-  /* Toggle switch */
   .toggle {
     position: relative;
     width: 50px;
@@ -148,15 +150,11 @@
   .toggle.active .toggle-knob {
     transform: translateX(22px);
   }
-
-  /* Slider */
   .slider {
     width: 100px;
     flex-shrink: 0;
     accent-color: var(--accent);
   }
-
-  /* Progress bar */
   .progress-bar {
     width: 80px;
     height: 6px;
@@ -170,8 +168,6 @@
     background: var(--accent);
     border-radius: 3px;
   }
-
-  /* Badge */
   .badge {
     font-size: 12px;
     font-weight: 500;

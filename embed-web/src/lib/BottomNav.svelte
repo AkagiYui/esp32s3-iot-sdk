@@ -1,19 +1,15 @@
 <script lang="ts">
+  import { routeEntries } from "./route-manifest";
   import { getRoute, navigate, type Route } from "./router.svelte";
-
-  const tabs: { path: Route; label: string; icon: string }[] = [
-    { path: "/", label: "首页", icon: "home" },
-    { path: "/dashboard", label: "仪表盘", icon: "dashboard" },
-    { path: "/settings", label: "设置", icon: "settings" },
-  ];
 </script>
 
 <nav class="bottom-nav">
-  {#each tabs as tab}
+  {#each routeEntries as tab}
     <button
       class="nav-item"
       class:active={getRoute() === tab.path}
-      onclick={() => navigate(tab.path)}
+      onclick={() => navigate(tab.path as Route)}
+      aria-label={tab.label}
     >
       <svg
         class="nav-icon"

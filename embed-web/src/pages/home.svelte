@@ -1,3 +1,13 @@
+<script module lang="ts">
+  import type { RouteMeta } from '../lib/route-manifest';
+
+  export const routeMeta: RouteMeta = {
+    label: '首页',
+    icon: 'home',
+    order: 0,
+  };
+</script>
+
 <div class="page">
   <div class="page-header">
     <h1>首页</h1>
