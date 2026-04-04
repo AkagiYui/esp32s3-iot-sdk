@@ -11,6 +11,7 @@ export type RouteMeta = {
   icon: RouteIcon;
   label: string;
   order: number;
+  ssg?: boolean;
 };
 
 export type RouteEntry = {
@@ -20,6 +21,7 @@ export type RouteEntry = {
   label: string;
   order: number;
   path: string;
+  ssg: boolean;
 };
 
 const pageModules = import.meta.glob<PageModule>('../pages/**/*.svelte', {
@@ -89,6 +91,7 @@ export const routeEntries: RouteEntry[] = Object.entries(pageModules)
       label: meta.label,
       order: meta.order,
       path,
+      ssg: meta.ssg ?? false,
     } satisfies RouteEntry;
   })
   .sort((left, right) => left.order - right.order || left.path.localeCompare(right.path));

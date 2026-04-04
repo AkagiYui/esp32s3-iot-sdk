@@ -5,6 +5,7 @@
     label: "首页",
     icon: "home",
     order: 0,
+    ssg: true,
   };
 </script>
 

@@ -5,6 +5,7 @@
     label: "设置",
     icon: "settings",
     order: 2,
+    ssg: true,
   };
 </script>
 
