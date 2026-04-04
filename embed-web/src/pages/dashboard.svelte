@@ -1,9 +1,9 @@
 <script module lang="ts">
-  import type { RouteMeta } from '../lib/route-manifest';
+  import type { RouteMeta } from "@/lib/route-manifest";
 
   export const routeMeta: RouteMeta = {
-    label: '仪表盘',
-    icon: 'dashboard',
+    label: "仪表盘",
+    icon: "dashboard",
     order: 1,
   };
 </script>
@@ -25,7 +25,7 @@
         <span class="control-icon">💡</span>
         <div>
           <h3>LED 灯</h3>
-          <p>{ledOn ? '已开启' : '已关闭'}</p>
+          <p>{ledOn ? "已开启" : "已关闭"}</p>
         </div>
       </div>
       <button
@@ -46,7 +46,13 @@
           <p>{brightness}%</p>
         </div>
       </div>
-      <input type="range" min="0" max="100" bind:value={brightness} class="slider" />
+      <input
+        type="range"
+        min="0"
+        max="100"
+        bind:value={brightness}
+        class="slider"
+      />
     </div>
 
     <div class="control-item">

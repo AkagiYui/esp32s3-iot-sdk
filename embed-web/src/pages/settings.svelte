@@ -1,15 +1,15 @@
 <script module lang="ts">
-  import type { RouteMeta } from '../lib/route-manifest';
+  import type { RouteMeta } from "@/lib/route-manifest";
 
   export const routeMeta: RouteMeta = {
-    label: '设置',
-    icon: 'settings',
+    label: "设置",
+    icon: "settings",
     order: 2,
   };
 </script>
 
 <script lang="ts">
-  let deviceName = $state('ESP32-S3-IoT');
+  let deviceName = $state("ESP32-S3-IoT");
 </script>
 
 <div class="page">
@@ -54,10 +54,14 @@
     <h2 class="group-title">操作</h2>
     <div class="settings-list">
       <div class="setting-item action">
-        <button class="btn" onclick={() => alert('OTA 升级功能待实现')}>检查更新</button>
+        <button class="btn" onclick={() => alert("OTA 升级功能待实现")}
+          >检查更新</button
+        >
       </div>
       <div class="setting-item action">
-        <button class="btn danger" onclick={() => confirm('确定要重启设备吗？')}>重启设备</button>
+        <button class="btn danger" onclick={() => confirm("确定要重启设备吗？")}
+          >重启设备</button
+        >
       </div>
     </div>
   </div>

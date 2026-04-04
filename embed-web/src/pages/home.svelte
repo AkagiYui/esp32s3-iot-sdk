@@ -1,9 +1,9 @@
 <script module lang="ts">
-  import type { RouteMeta } from '../lib/route-manifest';
+  import type { RouteMeta } from "@/lib/route-manifest";
 
   export const routeMeta: RouteMeta = {
-    label: '首页',
-    icon: 'home',
+    label: "首页",
+    icon: "home",
     order: 0,
   };
 </script>
