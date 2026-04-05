@@ -67,6 +67,10 @@
     margin-bottom: 18px;
   }
 
+  .topbar > div:first-child {
+    min-width: 0;
+  }
+
   .eyebrow {
     margin: 0 0 6px;
     font-size: 11px;
@@ -109,5 +113,47 @@
     background: var(--card-bg);
     color: var(--muted);
     text-align: center;
+  }
+
+  @media (min-width: 1100px) {
+    .shell {
+      max-width: none;
+      margin: 0;
+      padding: 28px 32px 32px 172px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .topbar {
+      width: min(100%, 960px);
+      align-items: end;
+      gap: 24px;
+      margin-bottom: 28px;
+      padding: 0 0 18px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .eyebrow {
+      margin-bottom: 10px;
+      font-size: 12px;
+      letter-spacing: 0.24em;
+    }
+
+    .topbar h1 {
+      font-size: clamp(32px, 3vw, 42px);
+      line-height: 0.98;
+      max-width: 12ch;
+    }
+
+    .status-pill {
+      padding: 10px 16px;
+      font-size: 14px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .app-content {
+      width: min(100%, 960px);
+    }
   }
 </style>
