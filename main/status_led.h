@@ -5,4 +5,4 @@
 #include "app_config.h"
 
 esp_err_t status_led_init(void);
-void status_led_set(led_rgb_t color, led_pattern_t pattern);
+void status_led_set(led_hsv_t color, led_pattern_t pattern);

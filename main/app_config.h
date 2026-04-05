@@ -30,6 +30,12 @@ typedef struct {
     uint8_t blue;
 } led_rgb_t;
 
-static const led_rgb_t KENKO_LED_ORANGE = { .red = 255, .green = 96, .blue = 0 };
-static const led_rgb_t KENKO_LED_BLUE = { .red = 0, .green = 64, .blue = 255 };
-static const led_rgb_t KENKO_LED_GREEN = { .red = 0, .green = 255, .blue = 32 };
+typedef struct {
+    uint16_t hue;
+    uint8_t saturation;
+    uint8_t value;
+} led_hsv_t;
+
+static const led_hsv_t KENKO_LED_ORANGE = { .hue = 24, .saturation = 255, .value = 255 };
+static const led_hsv_t KENKO_LED_BLUE = { .hue = 225, .saturation = 255, .value = 255 };
+static const led_hsv_t KENKO_LED_GREEN = { .hue = 128, .saturation = 255, .value = 255 };

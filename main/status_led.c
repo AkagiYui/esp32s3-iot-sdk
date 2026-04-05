@@ -10,9 +10,66 @@ static const char *TAG = "status_led";
 
 static struct {
     led_strip_handle_t strip;
-    led_rgb_t color;
+    led_hsv_t color;
     led_pattern_t pattern;
 } s_led;
+
+static led_rgb_t hsv_to_rgb(led_hsv_t hsv)
+{
+    led_rgb_t rgb = {0};
+
+    if (hsv.saturation == 0) {
+        rgb.red = hsv.value;
+        rgb.green = hsv.value;
+        rgb.blue = hsv.value;
+        return rgb;
+    }
+
+    uint16_t hue = hsv.hue % 360;
+    uint8_t region = hue / 60;
+    uint16_t remainder = (hue % 60) * 255 / 60;
+
+    uint16_t value = hsv.value;
+    uint16_t saturation = hsv.saturation;
+    uint8_t p = (uint8_t)(value * (255 - saturation) / 255);
+    uint8_t q = (uint8_t)(value * (255 - (saturation * remainder) / 255) / 255);
+    uint8_t t = (uint8_t)(value * (255 - (saturation * (255 - remainder)) / 255) / 255);
+
+    switch (region) {
+    case 0:
+        rgb.red = (uint8_t)value;
+        rgb.green = t;
+        rgb.blue = p;
+        break;
+    case 1:
+        rgb.red = q;
+        rgb.green = (uint8_t)value;
+        rgb.blue = p;
+        break;
+    case 2:
+        rgb.red = p;
+        rgb.green = (uint8_t)value;
+        rgb.blue = t;
+        break;
+    case 3:
+        rgb.red = p;
+        rgb.green = q;
+        rgb.blue = (uint8_t)value;
+        break;
+    case 4:
+        rgb.red = t;
+        rgb.green = p;
+        rgb.blue = (uint8_t)value;
+        break;
+    default:
+        rgb.red = (uint8_t)value;
+        rgb.green = p;
+        rgb.blue = q;
+        break;
+    }
+
+    return rgb;
+}
 
 static void apply_color(uint8_t red, uint8_t green, uint8_t blue)
 {
@@ -26,7 +83,8 @@ static void led_task(void *arg)
 
     for (;;) {
         if (s_led.pattern == LED_PATTERN_SOLID) {
-            apply_color(s_led.color.red, s_led.color.green, s_led.color.blue);
+            led_rgb_t rgb = hsv_to_rgb(s_led.color);
+            apply_color(rgb.red, rgb.green, rgb.blue);
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
@@ -36,9 +94,10 @@ static void led_task(void *arg)
                 break;
             }
             uint8_t scale = (uint8_t)((step <= 50 ? step : 100 - step) * 255 / 50);
-            apply_color((uint8_t)(s_led.color.red * scale / 255),
-                        (uint8_t)(s_led.color.green * scale / 255),
-                        (uint8_t)(s_led.color.blue * scale / 255));
+            led_hsv_t scaled_hsv = s_led.color;
+            scaled_hsv.value = (uint8_t)(s_led.color.value * scale / 255);
+            led_rgb_t rgb = hsv_to_rgb(scaled_hsv);
+            apply_color(rgb.red, rgb.green, rgb.blue);
             vTaskDelay(pdMS_TO_TICKS(20));
         }
     }
@@ -68,7 +127,7 @@ esp_err_t status_led_init(void)
     return ESP_OK;
 }
 
-void status_led_set(led_rgb_t color, led_pattern_t pattern)
+void status_led_set(led_hsv_t color, led_pattern_t pattern)
 {
     s_led.color = color;
     s_led.pattern = pattern;
