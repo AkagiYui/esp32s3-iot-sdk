@@ -1,7 +1,9 @@
 <script lang="ts">
   import "./lib/theme.svelte";
-  import { getCurrentRouteEntry } from "./lib/router.svelte";
+  import { getRoute, getCurrentRouteEntry } from "./lib/router.svelte";
   import BottomNav from "./components/BottomNav.svelte";
+  import { scale } from "svelte/transition";
+  import { cubicOut, cubicIn } from "svelte/easing";
 
   const fallbackMessage = "页面加载失败";
 </script>
@@ -24,11 +26,25 @@
   </header>
 
   <main class="app-content">
-    {#if getCurrentRouteEntry()}
-      <svelte:component this={getCurrentRouteEntry()?.component} />
-    {:else}
-      <section class="route-error">{fallbackMessage}</section>
-    {/if}
+    {#key getRoute()}
+      <div
+        class="page-wrapper"
+        in:scale={{
+          start: 0.85,
+          duration: 280,
+          delay: 200,
+          opacity: 0,
+          easing: cubicOut,
+        }}
+        out:scale={{ start: 0.85, duration: 200, opacity: 0, easing: cubicIn }}
+      >
+        {#if getCurrentRouteEntry()}
+          <svelte:component this={getCurrentRouteEntry()?.component} />
+        {:else}
+          <section class="route-error">{fallbackMessage}</section>
+        {/if}
+      </div>
+    {/key}
   </main>
 
   <BottomNav />
@@ -76,6 +92,11 @@
   }
 
   .app-content {
+    display: grid;
+  }
+
+  .page-wrapper {
+    grid-area: 1 / 1;
     display: flex;
     flex-direction: column;
     gap: 16px;
