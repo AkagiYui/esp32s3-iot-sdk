@@ -1,3 +1,28 @@
-idf_component_register(SRCS "hello_world_main.c"
-                       PRIV_REQUIRES spi_flash joltwallet__littlefs
-                       INCLUDE_DIRS "")
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "app_state.c"
+        "button_monitor.c"
+        "device_info.c"
+        "dns_captive.c"
+        "status_led.c"
+        "storage_fs.c"
+        "web_server.c"
+        "wifi_config_store.c"
+        "wifi_manager.c"
+    PRIV_REQUIRES
+        spi_flash
+        joltwallet__littlefs
+        esp_driver_gpio
+        esp_driver_rmt
+        esp_event
+        esp_http_server
+        esp_netif
+        esp_wifi
+        json
+        led_strip
+        lwip
+        mdns
+        nvs_flash
+        app_update
+    INCLUDE_DIRS ".")

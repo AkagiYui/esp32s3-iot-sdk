@@ -2,6 +2,24 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.16)
 
+execute_process(
+    COMMAND git rev-parse --short=7 HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_SHORT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+
+if(NOT GIT_SHORT_HASH)
+    set(GIT_SHORT_HASH unknown)
+endif()
+
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/main/firmware_version.h.in
+    ${CMAKE_CURRENT_SOURCE_DIR}/main/firmware_version.h
+    @ONLY
+)
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # "Trim" the build. Include the minimal set of components, main, and anything it depends on.
 idf_build_set_property(MINIMAL_BUILD ON)
