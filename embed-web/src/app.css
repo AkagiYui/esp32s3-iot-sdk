@@ -121,7 +121,7 @@ p {
 .card,
 .control-item,
 .settings-list,
-.bottom-nav {
+.nav-bar {
   box-shadow: var(--shadow-soft);
 }
 

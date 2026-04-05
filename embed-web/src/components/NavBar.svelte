@@ -3,7 +3,7 @@
   import { getRoute, navigate, type Route } from "@/lib/router.svelte";
 </script>
 
-<nav class="bottom-nav">
+<nav class="nav-bar">
   {#each routeEntries as tab}
     <button
       class="nav-item"
@@ -18,7 +18,7 @@
 </nav>
 
 <style>
-  .bottom-nav {
+  .nav-bar {
     position: fixed;
     bottom: 0;
     left: 0;
@@ -60,7 +60,7 @@
   }
 
   @media (min-width: 1100px) {
-    .bottom-nav {
+    .nav-bar {
       top: 24px;
       bottom: 24px;
       left: 24px;

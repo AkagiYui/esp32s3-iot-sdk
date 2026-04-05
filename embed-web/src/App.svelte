@@ -1,7 +1,7 @@
 <script lang="ts">
   import "./lib/theme.svelte";
   import { getRoute, getCurrentRouteEntry } from "./lib/router.svelte";
-  import BottomNav from "./components/BottomNav.svelte";
+  import NavBar from "./components/NavBar.svelte";
   import { scale } from "svelte/transition";
   import { cubicOut, cubicIn } from "svelte/easing";
 
@@ -47,7 +47,7 @@
     {/key}
   </main>
 
-  <BottomNav />
+  <NavBar />
 </div>
 
 <style>
