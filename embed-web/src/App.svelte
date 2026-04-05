@@ -2,6 +2,8 @@
   import "./lib/theme.svelte";
   import { getRoute, getCurrentRouteEntry } from "./lib/router.svelte";
   import NavBar from "./components/NavBar.svelte";
+  import DialogHost from "./components/DialogHost.svelte";
+  import ToastHost from "./components/ToastHost.svelte";
   import { scale } from "svelte/transition";
   import { cubicOut, cubicIn } from "svelte/easing";
 
@@ -49,6 +51,9 @@
 
   <NavBar />
 </div>
+
+<DialogHost />
+<ToastHost />
 
 <style>
   .shell {

@@ -15,6 +15,7 @@
     setThemeMode,
     type ThemeMode,
   } from "@/lib/theme.svelte";
+  import { showAlert, showConfirm, showToast } from "@/lib/feedback.svelte";
   import { Sun, Moon, Monitor } from "lucide-svelte";
 
   let deviceName = $state("ESP32-S3-IoT");
@@ -91,13 +92,22 @@
     <h2 class="group-title">操作</h2>
     <div class="settings-list">
       <div class="setting-item action">
-        <button class="btn" onclick={() => alert("OTA 升级功能待实现")}
-          >检查更新</button
+        <button
+          class="btn"
+          onclick={() => {
+            showAlert("OTA 升级功能待实现", "提示");
+            showToast("当前已是最新版本", "info");
+          }}>检查更新</button
         >
       </div>
       <div class="setting-item action">
-        <button class="btn danger" onclick={() => confirm("确定要重启设备吗？")}
-          >重启设备</button
+        <button
+          class="btn danger"
+          onclick={async () => {
+            const r = await showConfirm("确定要重启设备吗？", "重启设备", true);
+            if (r === "ok") showToast("设备正在重启…", "success");
+            else showToast("已取消重启", "warning");
+          }}>重启设备</button
         >
       </div>
     </div>
