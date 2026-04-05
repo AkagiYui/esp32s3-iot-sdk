@@ -3,6 +3,7 @@ import { readdirSync, statSync } from 'fs'
 import { defineConfig, type Plugin } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { viteSingleFile } from "vite-plugin-singlefile"
+import { precompress } from './plugins/vite-plugin-precompress'
 
 function viteBundleSize(): Plugin {
   return {
@@ -33,7 +34,7 @@ function viteBundleSize(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [svelte(), viteSingleFile(), viteBundleSize()],
+  plugins: [svelte(), viteSingleFile(), precompress(), viteBundleSize()],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
