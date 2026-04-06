@@ -10,7 +10,7 @@
 带有 CH343P USB 转串口芯片，支持 USB 连接和编程，内置SRAM 512KB，内置ROM 384KB，外扩PSRAM 8MB，外扩Flash 16MB。
 直通转出了 ESP32-S3 的 USB 接口，支持 USB OTG 功能。
 
-板载一颗 WS2812B RGB LED，连接到 GPIO 47。
+板载一颗 WS2812B RGB LED，连接到 GPIO 47 或 GPIO 48 。
 板载一颗轻触开关(BOOT)，连接到 GPIO 0，默认上拉，按下时接地。
 
 ## SDK 功能
