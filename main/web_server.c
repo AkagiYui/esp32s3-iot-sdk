@@ -488,7 +488,7 @@ esp_err_t web_server_start(void)
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.stack_size = 8192;
     config.max_open_sockets = 7;
-    config.max_uri_handlers = 16;
+    config.max_uri_handlers = 20;
     config.lru_purge_enable = true;
 
     ESP_RETURN_ON_ERROR(httpd_start(&s_server, &config), TAG, "start web server failed");
