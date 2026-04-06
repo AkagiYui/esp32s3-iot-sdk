@@ -16,7 +16,7 @@ endif()
 
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/main/firmware_version.h.in
-    ${CMAKE_CURRENT_SOURCE_DIR}/main/firmware_version.h
+    ${CMAKE_BINARY_DIR}/generated/firmware_version.h
     @ONLY
 )
 

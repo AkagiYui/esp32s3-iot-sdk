@@ -71,6 +71,32 @@ static led_rgb_t hsv_to_rgb(led_hsv_t hsv)
     return rgb;
 }
 
+static uint8_t perceptual_breath_value(uint8_t phase)
+{
+    uint16_t mirrored = phase <= 127 ? phase : (uint16_t)(255 - phase);
+    uint32_t normalized = mirrored * 2;
+
+    /*
+     * Use a smooth cubic ease-in/ease-out curve so the LED spends less time
+     * changing rapidly near the darkest and brightest points.
+     */
+    uint32_t x = normalized;
+    uint32_t x2 = (x * x) / 255;
+    uint32_t x3 = (x2 * x) / 255;
+    uint32_t eased = (3 * x2) - (2 * x3);
+    if (eased > 255) {
+        eased = 255;
+    }
+
+    /* Apply a light gamma-style shaping to better match perceived brightness. */
+    uint32_t perceptual = (eased * eased) / 255;
+    if (perceptual > 255) {
+        perceptual = 255;
+    }
+
+    return (uint8_t)perceptual;
+}
+
 static void apply_color(uint8_t red, uint8_t green, uint8_t blue)
 {
     led_strip_set_pixel(s_led.strip, 0, red, green, blue);
@@ -89,16 +115,16 @@ static void led_task(void *arg)
             continue;
         }
 
-        for (int step = 0; step <= 100; ++step) {
+        for (int step = 0; step < 256; step += 4) {
             if (s_led.pattern != LED_PATTERN_BREATHING) {
                 break;
             }
-            uint8_t scale = (uint8_t)((step <= 50 ? step : 100 - step) * 255 / 50);
+            uint8_t scale = perceptual_breath_value((uint8_t)step);
             led_hsv_t scaled_hsv = s_led.color;
             scaled_hsv.value = (uint8_t)(s_led.color.value * scale / 255);
             led_rgb_t rgb = hsv_to_rgb(scaled_hsv);
             apply_color(rgb.red, rgb.green, rgb.blue);
-            vTaskDelay(pdMS_TO_TICKS(20));
+            vTaskDelay(pdMS_TO_TICKS(12));
         }
     }
 }

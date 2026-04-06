@@ -25,4 +25,6 @@ idf_component_register(
         mdns
         nvs_flash
         app_update
-    INCLUDE_DIRS ".")
+    INCLUDE_DIRS
+        "."
+        "${CMAKE_BINARY_DIR}/generated")

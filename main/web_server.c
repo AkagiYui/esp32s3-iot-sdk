@@ -231,6 +231,7 @@ esp_err_t web_server_start(void)
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.stack_size = 8192;
     config.max_open_sockets = 7;
+    config.max_uri_handlers = 16;
     config.lru_purge_enable = true;
 
     ESP_RETURN_ON_ERROR(httpd_start(&s_server, &config), TAG, "start web server failed");
@@ -308,18 +309,18 @@ esp_err_t web_server_start(void)
         .user_ctx = NULL,
     };
 
-    httpd_register_uri_handler(s_server, &api_uri);
-    httpd_register_uri_handler(s_server, &api_uri_head);
-    httpd_register_uri_handler(s_server, &captive_generate_204);
-    httpd_register_uri_handler(s_server, &captive_generate_204_head);
-    httpd_register_uri_handler(s_server, &captive_hotspot_detect);
-    httpd_register_uri_handler(s_server, &captive_hotspot_detect_head);
-    httpd_register_uri_handler(s_server, &captive_connecttest);
-    httpd_register_uri_handler(s_server, &captive_connecttest_head);
-    httpd_register_uri_handler(s_server, &captive_ncsi);
-    httpd_register_uri_handler(s_server, &captive_ncsi_head);
-    httpd_register_uri_handler(s_server, &static_uri);
-    httpd_register_uri_handler(s_server, &static_uri_head);
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &api_uri), TAG, "register /api/device-info GET failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &api_uri_head), TAG, "register /api/device-info HEAD failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_generate_204), TAG, "register /generate_204 GET failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_generate_204_head), TAG, "register /generate_204 HEAD failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_hotspot_detect), TAG, "register /hotspot-detect.html GET failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_hotspot_detect_head), TAG, "register /hotspot-detect.html HEAD failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_connecttest), TAG, "register /connecttest.txt GET failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_connecttest_head), TAG, "register /connecttest.txt HEAD failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_ncsi), TAG, "register /ncsi.txt GET failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_ncsi_head), TAG, "register /ncsi.txt HEAD failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &static_uri), TAG, "register static GET failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &static_uri_head), TAG, "register static HEAD failed");
     ESP_LOGI(TAG, "web server started on port %d", config.server_port);
     return ESP_OK;
 }
