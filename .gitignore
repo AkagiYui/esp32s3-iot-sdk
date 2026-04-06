@@ -1,5 +1,7 @@
 build/
 .vscode/
 
+AGENTS.md
+
 sdkconfig.old
 managed_components
