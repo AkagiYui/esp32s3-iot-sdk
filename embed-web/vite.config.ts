@@ -41,7 +41,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],
-    // vite-plugin-solid 需要 dev 版本的 solid-js 才能在测试里跑响应式
+    setupFiles: ["./src/test/setup.ts"],
+    // Solid 必须在测试里走 browser/development 条件，否则响应式不生效
     server: { deps: { inline: [/solid-js/, /@solidjs\/testing-library/] } },
   },
 
@@ -55,6 +56,15 @@ export default defineConfig({
     rules: {
       "vite-plus/prefer-vite-plus-imports": "error",
     },
+    overrides: [
+      {
+        files: ["**/*.test.ts", "**/*.test.tsx"],
+        rules: {
+          // testing-library 的 render() 返回值就是这样解构使用的
+          "typescript/unbound-method": "off",
+        },
+      },
+    ],
     options: {
       typeAware: true,
       typeCheck: true,

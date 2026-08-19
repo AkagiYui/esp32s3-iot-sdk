@@ -16,7 +16,8 @@
 
 ### 技术栈
 
-- 使用 `Svelte + TypeScript + Vite`
+- 使用 `SolidJS + TypeScript`
+- 工具链统一由 `Vite+`（`vp`）管理：dev / build / lint / format / test / 包管理
 - UI 必须按移动端优先设计
 - 页面必须以 CSR 方式运行
 
@@ -67,122 +68,134 @@
 
 因此，本项目不引入任何 SSR 框架行为，也不接受半 SSR、预渲染依赖服务端逻辑、或混合渲染作为默认架构。
 
-## 路由组织建议
+## 为什么选 SolidJS
 
-当前项目允许使用轻量路由实现，但长期建议采用“基于文件的路由生成”而不是手工维护路由表。
+- 编译期把 JSX 展开为直接的 DOM 操作，没有虚拟 DOM diff，运行时非常小
+- 细粒度响应式，页面局部更新不会重建节点，输入框不会掉焦点
+- 纯 CSR 友好，不带任何 SSR 心智负担
+- 产物体积对设备 flash 友好：当前单文件产物 74 KB，brotli 后 23 KB
 
-推荐目标如下：
+## 路由组织
 
-- 页面文件放在 `src/pages/` 下
-- 路由根据文件结构自动生成
-- 路由元信息尽量从文件名或约定导出中推断
-- 页面新增时尽量不需要手写集中式路由定义
+路由由 `src/lib/route-manifest.ts` 在构建时通过 `import.meta.glob` 扫描 `src/pages/**/*.tsx` 生成，新增页面不需要改动集中式路由表。
 
-例如：
+映射规则：
 
-- `src/pages/home.svelte` -> `#/`
-- `src/pages/dashboard.svelte` -> `#/dashboard`
-- `src/pages/settings.svelte` -> `#/settings`
-- `src/pages/network/wifi.svelte` -> `#/network/wifi`
-- `src/pages/device.logs.svelte` -> `#/device/logs`
+- `src/pages/home.tsx` -> `#/`
+- `src/pages/dashboard.tsx` -> `#/dashboard`
+- `src/pages/settings.tsx` -> `#/settings`
+- `src/pages/network/wifi.tsx` -> `#/network/wifi`
+- `src/pages/device.logs.tsx` -> `#/device/logs`（文件名里的 `.` 也是一段路径）
+- 以 `index` 结尾的段会被去掉：`src/pages/network/index.tsx` -> `#/network`
 
-## 是否可以改成基于文件的路由生成
-
-可以，而且这更符合项目后续扩展方向。
-
-在当前技术约束下，推荐做法不是引入带 SSR 心智负担的完整框架，而是继续保持 Vite + Svelte 的纯前端结构，并利用构建工具能力生成路由：
-
-- 使用 `import.meta.glob` 扫描 `src/pages/**/*.svelte`
-- 通过文件名、子目录和 `.` 分段自动推导 hash 路径
-- 页面通过模块导出 `routeMeta` 提供标题、图标和排序
-- 生成页面映射表与导航元数据
-- 仍然保持纯 CSR
-- 仍然使用 hash route
-- 不引入任何 SSR 行为
-
-也就是说：
-
-- 可以改成“基于文件的路由生成”
-- 但仍然必须是 `Hash Route + CSR`
-- 不应为了文件路由而切换到带 SSR 默认能力的架构
-
-## 目录建议
-
-```text
-src/
-  lib/
-    router.svelte.ts
-    navigation.ts
-  pages/
-    home.svelte
-    dashboard.svelte
-    settings.svelte
-  App.svelte
-  app.css
-  main.ts
-```
-
-后续如果切换为文件路由生成，可进一步演进为：
-
-```text
-src/
-  lib/
-    router.svelte.ts
-    route-manifest.ts
-  pages/
-    home.svelte
-    dashboard.svelte
-    settings.svelte
-    network/
-      wifi.svelte
-    device.logs.svelte
-```
-
-其中 `route-manifest.ts` 可以在运行时或构建时由 `import.meta.glob` 生成页面映射。
+页面文件名使用小写开头，`*.test.tsx` 不会被当成页面。
 
 ## 页面文件约定
 
-- 页面文件名使用小写开头
-- `home.svelte` 映射为根路由 `#/`
-- 子目录会映射为多段路由，例如 `pages/network/wifi.svelte` -> `#/network/wifi`
-- 文件名中的 `.` 会作为额外分段，例如 `pages/device.logs.svelte` -> `#/device/logs`
-- 页面需在模块脚本中导出 `routeMeta`
+页面需要 `export default` 一个组件，并导出 `routeMeta` 提供导航元信息：
 
-示例：
+```tsx
+import { Wifi } from "lucide-solid";
+import type { RouteMeta } from "@/lib/route-manifest";
 
-```svelte
-<script module lang="ts">
-  import type { RouteMeta } from '../lib/route-manifest';
+export const routeMeta: RouteMeta = {
+  label: "网络",
+  icon: Wifi,
+  order: 30,
+};
 
-  export const routeMeta: RouteMeta = {
-    label: '网络',
-    icon: 'settings',
-    order: 30,
-  };
-</script>
+export default function NetworkPage() {
+  return <div class="page">…</div>;
+}
 ```
 
-## 开发原则
+没有导出 `routeMeta` 时会按路径推导一个兜底的标题与图标，排序值为 `999`。
 
-- 优先保证部署可靠性，而不是追求 Web 框架特性完整性
-- 优先保证移动端单手操作体验
-- 优先保证代码可读性、可裁剪性和低依赖
-- 优先保证设备端静态部署兼容性
-- 新增页面和功能时，不得破坏 `Hash Route + CSR Only` 的基本约束
+## 样式约定
+
+样式分两层：
+
+- **全局层** `src/app.css`：设计令牌（CSS 变量）、reset，以及三个跨页面复用的排版原语 `.page` / `.page-header` / `.subtitle`
+- **组件层** 每个组件旁边的 `*.module.css`：CSS Modules，构建时类名会被压成短哈希
+
+两层需要叠加时用 `cx()` 拼接，例如 `class={cx("page-header", styles.pageHeader)}`。
+组件层的规则一定晚于 `app.css` 注入，因此同优先级下组件样式覆盖全局样式。
+
+Solid 没有内置过渡指令，出入场动画统一由 `src/lib/presence.ts` 的 `createPresence`
+配合纯 CSS `@keyframes` 实现：元素在隐藏后会多挂载一段时间，播完动画再卸载。
+JS 里的时长常量与对应 `*.module.css` 中的 `animation-duration` 必须保持一致。
+
+## 目录结构
+
+```text
+src/
+  lib/
+    api.ts              # fetch 封装
+    cx.ts               # class 拼接
+    feedback.ts         # dialog / toast 状态
+    presence.ts         # 出场动画的挂载保持原语
+    route-manifest.ts   # 由 pages/ 扫描生成的路由清单
+    router.ts           # hash 路由信号
+    theme.ts            # 主题模式与 data-theme
+    wifi.ts             # WiFi 领域类型与设备接口
+  components/
+    DialogHost.tsx      # 全局对话框
+    NavBar.tsx          # 底部 / 侧边导航
+    RouteView.tsx       # 页面容器与切换动画
+    ToastHost.tsx       # 全局轻提示
+    WifiScanModal.tsx   # 附近 WiFi 选择弹窗
+  pages/
+    home.tsx
+    dashboard.tsx
+    settings.tsx
+    wifi.tsx
+  test/
+    setup.ts
+  App.tsx
+  app.css
+  main.tsx
+```
 
 ## 开发命令
 
+前提：本机已安装 Vite+（`curl -fsSL https://vite.plus | bash`）。`vp` 会按
+`.node-version` 自行准备 Node.js，按 `packageManager` 自行准备包管理器，不需要额外装 Node 或 pnpm。
+
 ```bash
-npm install
-npm run dev
-npm run build
-npm run check
+vp install
 ```
+
+```bash
+vp dev
+```
+
+```bash
+vp check
+```
+
+```bash
+vp test
+```
+
+```bash
+vp build
+```
+
+`vp dev` 下会启用一个仅开发期生效的设备 API 模拟层（`plugins/vite-plugin-dev-api-mock.ts`），
+`/api/wifi-config`、`/api/wifi-scan`、`/api/device-info` 都有内存态假数据，
+所以不接硬件也能完整联调。构建产物不包含这段代码。
+
+固件侧的 `cmake --build build --target merged_bin` 会自动调用 `vp build` 生成 `dist/`，
+再打包进 `web` 分区镜像，不需要手动先构建前端。
+
+## 构建产物
+
+`vite-plugin-singlefile` 会把 JS/CSS 全部内联进 `index.html`，
+`plugins/vite-plugin-precompress.ts` 再额外生成 `.gz` / `.br` / `.zst`，
+设备端 `main/web_server.c` 会按请求的 `Accept-Encoding` 选择最合适的一份直接下发。
 
 ## 后续演进建议
 
-- 将当前手写路由表演进为基于文件扫描的路由清单生成
-- 为页面定义统一的标题、图标、导航顺序元数据
-- 将模拟数据替换为真实设备接口
-- 增加网络状态、传感器状态、日志、OTA 等设备页
-- 在保持纯 CSR 的前提下补充页面切换动画与错误态处理
+- 将模拟数据替换为真实设备接口（首页、仪表盘、设置页目前仍是静态占位）
+- 增加传感器状态、日志、OTA 等设备页
+- 补充页面级错误态与断线重连处理

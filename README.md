@@ -25,7 +25,7 @@
 - [x] 按顺序循环尝试已保存的 WiFi 配置
 - [x] BOOT 键长按进入配网或清空配置
 - [x] WS2812 状态灯指示当前系统状态
-- [ ] WiFi 配置前端页面与提交接口
+- [x] WiFi 配置前端页面与提交接口
 - [ ] 蓝牙配网或设备控制
 - [ ] MQTT 通信
 
@@ -63,8 +63,40 @@
 - [x] 根据 `Accept-Encoding` 按顺序尝试返回预压缩静态资源
 - [x] 支持 `.br`、`.gz`、`.zst` 预压缩文件
 - [x] 提供 `GET /api/device-info` 设备信息接口
+- [x] 提供 `GET/PUT /api/wifi-config` 多组 WiFi 配置读写接口
+- [x] 提供 `GET /api/wifi-scan` 附近 WiFi 扫描接口
 - [x] 提供 captive portal 常见探测地址的重定向
-- [ ] 设置 STA 模式的目标 SSID 和密码
+- [x] 设置 STA 模式的目标 SSID 和密码
 - [ ] 设置时区
 - [ ] 恢复出厂设置页面
 - [ ] 重启设备页面
+
+## 构建
+
+固件侧需要 ESP-IDF v6.0.2；设备内置 Web 前端（`embed-web/`）由
+[Vite+](https://viteplus.dev/) 统一管理，安装后 `vp` 会自行准备 Node.js 和包管理器：
+
+```bash
+curl -fsSL https://vite.plus | bash
+```
+
+首次拉取仓库后先安装前端依赖：
+
+```bash
+vp -C embed-web install
+```
+
+之后一条命令即可产出可直接烧录的完整镜像（会自动触发 `vp build` 生成前端产物，
+再打包为 `web` 分区镜像并与 bootloader、分区表、固件合并）：
+
+```bash
+cmake --build build --target merged_bin
+```
+
+前端可以脱离硬件单独开发，`vp dev` 自带设备 API 的模拟层：
+
+```bash
+vp -C embed-web dev
+```
+
+详见 [embed-web/README.md](embed-web/README.md)。

@@ -35,9 +35,11 @@ jobs:
         working-directory: embed-web
         run: vp install --frozen-lockfile
 
-      - name: Check web frontend
+      - name: Check and test web frontend
         working-directory: embed-web
-        run: vp check
+        run: |
+          vp check
+          vp test
 
       # 单步完成：vp build（CMake build_web target）+ 固件 + merged bin
       - name: Build firmware, web and merged binary
