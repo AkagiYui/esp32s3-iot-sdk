@@ -1,62 +1,59 @@
-import type { Component, ComponentType } from "svelte";
-import { House } from "lucide-svelte";
+import type { Component, JSX } from "solid-js";
+import { House, type LucideProps } from "lucide-solid";
+
+/** lucide 图标组件，用于导航栏与页面标题区。 */
+export type IconComponent = (props: LucideProps) => JSX.Element;
+
+/** 页面模块通过 `export const routeMeta` 声明自己的导航元信息。 */
+export type RouteMeta = {
+  icon: IconComponent;
+  label: string;
+  order: number;
+};
+
+export type RouteEntry = RouteMeta & {
+  component: Component;
+  filePath: string;
+  path: string;
+};
 
 type PageModule = {
   default: Component;
   routeMeta?: RouteMeta;
 };
 
-export type RouteMeta = {
-  icon: ComponentType;
-  label: string;
-  order: number;
-};
-
-export type RouteEntry = {
-  component: Component;
-  filePath: string;
-  icon: ComponentType;
-  label: string;
-  order: number;
-  path: string;
-};
-
-const pageModules = import.meta.glob<PageModule>("../pages/**/*.svelte", {
+const pageModules = import.meta.glob<PageModule>(["../pages/**/*.tsx", "!**/*.test.tsx"], {
   eager: true,
 });
 
 function stripPagesPrefix(filePath: string): string {
-  return filePath.replace(/^\.\.\/pages\//, "").replace(/\.svelte$/, "");
+  return filePath.replace(/^\.\.\/pages\//, "").replace(/\.tsx$/, "");
 }
 
-function routeKeyFromFilePath(filePath: string): string {
-  return stripPagesPrefix(filePath)
-    .split("/")
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .join("/");
-}
-
-function routePathFromFilePath(filePath: string): string {
-  const routeKey = routeKeyFromFilePath(filePath);
-  const normalized = routeKey
+/**
+ * 由页面文件路径推导 hash 路由：
+ * `home.tsx` -> `/`，`network/wifi.tsx` -> `/network/wifi`，`device.logs.tsx` -> `/device/logs`。
+ */
+export function routePathFromFilePath(filePath: string): string {
+  const segments = stripPagesPrefix(filePath)
     .split("/")
     .flatMap((segment) => segment.split("."))
     .map((segment) => segment.trim().toLowerCase())
     .filter(Boolean);
 
-  if (normalized.length === 1 && normalized[0] === "home") {
+  if (segments.length === 1 && segments[0] === "home") {
     return "/";
   }
 
-  if (normalized.at(-1) === "index") {
-    normalized.pop();
+  if (segments.at(-1) === "index") {
+    segments.pop();
   }
 
-  return normalized.length === 0 ? "/" : `/${normalized.join("/")}`;
+  return segments.length === 0 ? "/" : `/${segments.join("/")}`;
 }
 
-function defaultLabelFromPath(path: string): string {
+/** 页面没有导出 `routeMeta` 时的兜底标题。 */
+export function defaultLabelFromPath(path: string): string {
   if (path === "/") {
     return "首页";
   }
@@ -82,11 +79,9 @@ export const routeEntries: RouteEntry[] = Object.entries(pageModules)
     const meta = module.routeMeta ?? defaultMeta(path);
 
     return {
+      ...meta,
       component: module.default,
       filePath,
-      icon: meta.icon,
-      label: meta.label,
-      order: meta.order,
       path,
     } satisfies RouteEntry;
   })

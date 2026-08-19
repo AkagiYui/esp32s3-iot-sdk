@@ -1,3 +1,9 @@
+/*
+ * 全局层：设计令牌、reset，以及页面共用的三个排版原语
+ * （.page / .page-header / .subtitle）。
+ * 其余样式一律放在组件自己的 CSS Module 里。
+ */
+
 :root {
   --bg: #f4efe7;
   --surface: rgba(255, 252, 246, 0.78);
@@ -116,13 +122,6 @@ p {
 .subtitle {
   font-size: 14px;
   color: var(--muted);
-}
-
-.card,
-.control-item,
-.settings-list,
-.nav-bar {
-  box-shadow: var(--shadow-soft);
 }
 
 @media (min-width: 700px) {

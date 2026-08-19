@@ -7,18 +7,19 @@
     "dev": "vp dev",
     "build": "vp build",
     "preview": "vp preview",
-    "check": "vp check && vp exec svelte-check --tsconfig ./tsconfig.app.json"
+    "check": "vp check",
+    "test": "vp test"
+  },
+  "dependencies": {
+    "lucide-solid": "^1.32.0",
+    "solid-js": "^1.9.15"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^7.0.0",
-    "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^24.12.0",
-    "lucide-svelte": "^1.0.1",
-    "svelte": "^5.53.12",
-    "svelte-check": "^4.4.5",
     "typescript": "~5.9.3",
     "vite": "catalog:",
     "vite-plugin-singlefile": "^2.3.2",
+    "vite-plugin-solid": "^2.11.14",
     "vite-plus": "catalog:"
   },
   "devEngines": {

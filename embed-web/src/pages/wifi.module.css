@@ -1,0 +1,223 @@
+.wifiPage {
+  gap: 18px;
+}
+
+.toolbarActions,
+.toolbar,
+.cardTop,
+.cardActions,
+.ssidRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.toolbar {
+  align-items: stretch;
+}
+
+.toolbarActions {
+  justify-content: flex-end;
+}
+
+.summaryPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: rgba(43, 122, 120, 0.1);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.primaryBtn,
+.saveBtn,
+.chipBtn {
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.primaryBtn,
+.saveBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
+  font-weight: 600;
+  background: var(--accent);
+  color: white;
+  box-shadow: var(--shadow-soft);
+}
+
+.configList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.configCard,
+.emptyCard {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-soft);
+}
+
+.configCard.editing {
+  border-color: rgba(43, 122, 120, 0.32);
+  box-shadow: 0 20px 44px rgba(43, 122, 120, 0.12);
+}
+
+.orderBlock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.dragHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: rgba(43, 122, 120, 0.1);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.orderLabel {
+  margin-bottom: 4px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.orderBlock h3 {
+  font-size: 19px;
+  color: var(--text-h);
+  word-break: break-all;
+}
+
+.chipBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(43, 122, 120, 0.08);
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.chipBtn.danger {
+  background: rgba(199, 77, 60, 0.12);
+  color: var(--danger);
+}
+
+.passwordPreview {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.editorGrid {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.ssidRow {
+  align-items: stretch;
+}
+
+.field span {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.field input,
+.passwordWrap {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.field input {
+  padding: 0 14px;
+  color: var(--text-h);
+  outline: none;
+}
+
+.field input:focus,
+.passwordWrap:focus-within {
+  border-color: rgba(43, 122, 120, 0.42);
+  box-shadow: 0 0 0 4px rgba(43, 122, 120, 0.12);
+}
+
+.passwordWrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  color: var(--muted);
+}
+
+.passwordWrap input {
+  min-height: 44px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.ssidPickerBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(43, 122, 120, 0.08);
+  color: var(--accent-strong);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.emptyCard {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  color: var(--muted);
+  text-align: center;
+  padding: 32px 18px;
+}
+
+@media (min-width: 900px) {
+  .editorGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+}

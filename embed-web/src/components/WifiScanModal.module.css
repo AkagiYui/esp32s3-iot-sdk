@@ -1,0 +1,206 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(16, 20, 18, 0.34);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  animation: overlay-in 180ms linear both;
+}
+
+.overlay.leaving {
+  animation: overlay-out 180ms linear both;
+}
+
+.modal {
+  width: min(100%, 560px);
+  max-height: min(80dvh, 720px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+  animation: modal-in 220ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+.modal.leaving {
+  animation: modal-out 220ms cubic-bezier(0.32, 0, 0.67, 0) both;
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes modal-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+.modalHeader,
+.scanMain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.modalHeader h2 {
+  margin: 0 0 6px;
+  font-size: 24px;
+  color: var(--text-h);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.iconBtn,
+.scanItem {
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(43, 122, 120, 0.08);
+  color: var(--accent-strong);
+  flex-shrink: 0;
+}
+
+.spinning {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.scanList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.scanItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: left;
+}
+
+.signalBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 92px;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ssidStack {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ssidStack strong,
+.ssidStack span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssidStack strong {
+  color: var(--text-h);
+  font-size: 15px;
+}
+
+.ssidStack span,
+.quality,
+.emptyState {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.quality {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.emptyState {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 32px 18px 12px;
+  text-align: center;
+}

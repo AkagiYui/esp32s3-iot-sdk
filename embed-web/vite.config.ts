@@ -1,19 +1,48 @@
 import { resolve } from "node:path";
 import { defineConfig, lazyPlugins } from "vite-plus";
-import { svelte } from "@sveltejs/vite-plugin-svelte";
+import solid from "vite-plugin-solid";
 import { viteSingleFile } from "vite-plugin-singlefile";
 import { precompress } from "./plugins/vite-plugin-precompress";
 import { viteBundleSize } from "./plugins/vite-plugin-bundle-size";
+import { devApiMock } from "./plugins/vite-plugin-dev-api-mock";
 
-// Vite+ keeps the whole toolchain (dev/build/lint/fmt/test) in this single file.
+const isProduction = process.env.NODE_ENV === "production";
+
+// Vite+ keeps the whole toolchain (dev / build / lint / fmt / test) in this single file.
 // https://viteplus.dev/config/
 export default defineConfig({
-  plugins: lazyPlugins(() => [svelte(), viteSingleFile(), precompress(), viteBundleSize()]),
+  plugins: lazyPlugins(() => [
+    solid(),
+    devApiMock(),
+    viteSingleFile(),
+    precompress(),
+    viteBundleSize(),
+  ]),
 
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),
     },
+  },
+
+  css: {
+    modules: {
+      // 产物要塞进设备 flash，生产构建下用最短的哈希类名；开发时保留可读名称。
+      generateScopedName: isProduction ? "[hash:base64:5]" : "[name]__[local]",
+    },
+  },
+
+  build: {
+    target: "es2022",
+    // 单文件产物已内联，chunk 体积告警没有意义
+    chunkSizeWarningLimit: 4096,
+  },
+
+  test: {
+    environment: "jsdom",
+    include: ["src/**/*.test.{ts,tsx}"],
+    // vite-plugin-solid 需要 dev 版本的 solid-js 才能在测试里跑响应式
+    server: { deps: { inline: [/solid-js/, /@solidjs\/testing-library/] } },
   },
 
   fmt: {
@@ -33,6 +62,6 @@ export default defineConfig({
   },
 
   staged: {
-    "*.{js,ts,svelte,css,json}": "vp check --fix",
+    "*.{js,ts,tsx,css,json}": "vp check --fix",
   },
 });

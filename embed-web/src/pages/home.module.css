@@ -1,0 +1,59 @@
+.pageHeader {
+  margin-bottom: 24px;
+}
+
+.pageHeader h1 {
+  font-size: 28px;
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: var(--shadow-soft);
+}
+
+.cardIcon {
+  color: var(--accent);
+  line-height: 0;
+}
+
+.card h3 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 400;
+}
+
+.value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin: 2px 0 0;
+}
+
+.status {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 2px 0 0;
+}
+
+.status.online {
+  color: #22c55e;
+}
