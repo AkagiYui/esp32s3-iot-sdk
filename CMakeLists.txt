@@ -30,9 +30,9 @@ set(EMBED_WEB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/embed-web)
 
 # 构建前端，产物在 embed-web/dist/
 add_custom_target(build_web
-    COMMAND pnpm build
+    COMMAND vp build
     WORKING_DIRECTORY ${EMBED_WEB_DIR}
-    COMMENT "Building embed web frontend with pnpm..."
+    COMMENT "Building embed web frontend with Vite+ (vp build)..."
     VERBATIM
 )
 

@@ -1,5 +1,5 @@
-import type { Component, ComponentType } from 'svelte';
-import { House } from 'lucide-svelte';
+import type { Component, ComponentType } from "svelte";
+import { House } from "lucide-svelte";
 
 type PageModule = {
   default: Component;
@@ -21,51 +21,51 @@ export type RouteEntry = {
   path: string;
 };
 
-const pageModules = import.meta.glob<PageModule>('../pages/**/*.svelte', {
+const pageModules = import.meta.glob<PageModule>("../pages/**/*.svelte", {
   eager: true,
 });
 
 function stripPagesPrefix(filePath: string): string {
-  return filePath.replace(/^\.\.\/pages\//, '').replace(/\.svelte$/, '');
+  return filePath.replace(/^\.\.\/pages\//, "").replace(/\.svelte$/, "");
 }
 
 function routeKeyFromFilePath(filePath: string): string {
   return stripPagesPrefix(filePath)
-    .split('/')
+    .split("/")
     .map((segment) => segment.trim())
     .filter(Boolean)
-    .join('/');
+    .join("/");
 }
 
 function routePathFromFilePath(filePath: string): string {
   const routeKey = routeKeyFromFilePath(filePath);
   const normalized = routeKey
-    .split('/')
-    .flatMap((segment) => segment.split('.'))
+    .split("/")
+    .flatMap((segment) => segment.split("."))
     .map((segment) => segment.trim().toLowerCase())
     .filter(Boolean);
 
-  if (normalized.length === 1 && normalized[0] === 'home') {
-    return '/';
+  if (normalized.length === 1 && normalized[0] === "home") {
+    return "/";
   }
 
-  if (normalized.at(-1) === 'index') {
+  if (normalized.at(-1) === "index") {
     normalized.pop();
   }
 
-  return normalized.length === 0 ? '/' : `/${normalized.join('/')}`;
+  return normalized.length === 0 ? "/" : `/${normalized.join("/")}`;
 }
 
 function defaultLabelFromPath(path: string): string {
-  if (path === '/') {
-    return '首页';
+  if (path === "/") {
+    return "首页";
   }
 
   return path
     .slice(1)
-    .split('/')
+    .split("/")
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(' / ');
+    .join(" / ");
 }
 
 function defaultMeta(path: string): RouteMeta {

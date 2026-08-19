@@ -48,11 +48,7 @@ export function showAlert(message: string, title?: string) {
 
 /** Two‑button confirmation dialog (replaces `confirm`).
  *  Resolves `"ok"` or `undefined` (dismissed / cancelled). */
-export function showConfirm(
-  message: string,
-  title?: string,
-  danger = false,
-) {
+export function showConfirm(message: string, title?: string, danger = false) {
   return openDialog({
     title,
     message,
@@ -90,11 +86,7 @@ export function removeToast(id: number) {
   toasts = toasts.filter((t) => t.id !== id);
 }
 
-export function showToast(
-  message: string,
-  type: ToastType = "info",
-  duration = 2500,
-) {
+export function showToast(message: string, type: ToastType = "info", duration = 2500) {
   const id = nextId++;
   toasts = [...toasts, { id, message, type, duration }];
   setTimeout(() => removeToast(id), duration);

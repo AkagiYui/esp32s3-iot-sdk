@@ -15,23 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # ESP-IDF 容器是 Ubuntu，手动装 Node.js + pnpm
-      - name: Install Node.js and pnpm
-        run: |
-          curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-          apt-get install -y --no-install-recommends nodejs
-          corepack enable && corepack prepare pnpm@latest --activate
-
-      - name: Get pnpm store path
-        id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
-
-      - name: Cache pnpm store
-        uses: actions/cache@v5
+      # ESP-IDF 容器是 Ubuntu，Vite+ 自带 Node.js 与包管理器供给
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.17.0
         with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-${{ hashFiles('embed-web/pnpm-lock.yaml') }}
-          restore-keys: pnpm-
+          working-directory: embed-web
+          node-version-file: embed-web/.node-version
+          run-install: "false"
+          cache: true
 
       # joltwallet/littlefs 等托管组件，按 idf_component.yml 缓存
       - name: Cache IDF managed components
@@ -42,9 +33,13 @@ jobs:
 
       - name: Install web dependencies
         working-directory: embed-web
-        run: pnpm install --frozen-lockfile
+        run: vp install --frozen-lockfile
 
-      # 单步完成：pnpm build（CMake build_web target）+ 固件 + merged bin
+      - name: Check web frontend
+        working-directory: embed-web
+        run: vp check
+
+      # 单步完成：vp build（CMake build_web target）+ 固件 + merged bin
       - name: Build firmware, web and merged binary
         run: |
           . $IDF_PATH/export.sh

@@ -1,15 +1,15 @@
-import { routeMap, routePaths } from './route-manifest';
+import { routeMap, routePaths } from "./route-manifest";
 
 export type Route = (typeof routePaths)[number];
 
 let current = $state<Route>(parseHash());
 
 function parseHash(): Route {
-  const hash = window.location.hash.slice(1) || '/';
-  return routeMap.has(hash) ? (hash as Route) : '/';
+  const hash = window.location.hash.slice(1) || "/";
+  return routeMap.has(hash) ? (hash as Route) : "/";
 }
 
-window.addEventListener('hashchange', () => {
+window.addEventListener("hashchange", () => {
   current = parseHash();
 });
 
@@ -22,5 +22,5 @@ export function getRoute(): Route {
 }
 
 export function getCurrentRouteEntry() {
-  return routeMap.get(current) ?? routeMap.get('/');
+  return routeMap.get(current) ?? routeMap.get("/");
 }
