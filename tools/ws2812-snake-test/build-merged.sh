@@ -33,4 +33,4 @@ ${BUILD_CMDS}
 "
 fi
 
-printf '\nMerged firmware: %s\n' "${BUILD_DIR}/ws2812_smoke_test-merged.bin"
+printf '\nMerged firmware: %s\n' "${BUILD_DIR}/ws2812_snake_test-merged.bin"
