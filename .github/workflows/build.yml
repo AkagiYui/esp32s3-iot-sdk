@@ -20,7 +20,7 @@ jobs:
         uses: voidzero-dev/setup-vp@v1.17.0
         with:
           working-directory: embed-web
-          node-version-file: embed-web/.node-version
+          node-version-file: .node-version
           run-install: "false"
           cache: true
 
