@@ -10,7 +10,7 @@ jobs:
     name: Build ESP32-S3 Firmware & Web
     runs-on: ubuntu-latest
     container:
-      image: espressif/idf:v5.5.3
+      image: espressif/idf:v6.0.2
 
     steps:
       - uses: actions/checkout@v6

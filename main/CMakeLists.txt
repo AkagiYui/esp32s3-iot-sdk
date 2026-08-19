@@ -19,7 +19,7 @@ idf_component_register(
         esp_http_server
         esp_netif
         esp_wifi
-        json
+        espressif__cjson
         led_strip
         lwip
         mdns
