@@ -12,7 +12,7 @@ describe("RouteView", () => {
   it("首屏渲染当前路由且不播入场动画", async () => {
     const { container, findByText } = render(() => <RouteView />);
 
-    await findByText("ESP32-S3 IoT 控制面板");
+    await findByText("设备当前状态一览");
     const layers = container.querySelectorAll("main > div");
     expect(layers).toHaveLength(1);
     expect(layers[0]!.className).not.toMatch(/enter|leave/);
@@ -20,7 +20,7 @@ describe("RouteView", () => {
 
   it("切换路由时新旧页面共存，旧页面播完动画才卸载", async () => {
     const { container, findByText } = render(() => <RouteView />);
-    await findByText("ESP32-S3 IoT 控制面板");
+    await findByText("设备当前状态一览");
 
     const firstLayer = container.querySelector("main > div");
     window.location.hash = "#/dashboard";
@@ -39,6 +39,6 @@ describe("RouteView", () => {
     await waitFor(() => expect(container.querySelectorAll("main > div")).toHaveLength(1), {
       timeout: 1000,
     });
-    await findByText("设备控制与监控");
+    await findByText("运行指标与硬件信息");
   });
 });

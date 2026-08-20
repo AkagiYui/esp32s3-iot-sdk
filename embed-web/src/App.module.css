@@ -79,3 +79,51 @@
     box-shadow: var(--shadow-soft);
   }
 }
+
+.statusPill.online {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.statusPill.provisioning {
+  background: color-mix(in srgb, #3b82f6 18%, transparent);
+  color: #2563eb;
+}
+
+.statusPill.offline {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.crash {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 18px;
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-radius: 18px;
+  background: var(--card-bg);
+  text-align: center;
+}
+
+.crash h2 {
+  font-size: 17px;
+  color: var(--text-h);
+}
+
+.crash p {
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.crash button {
+  align-self: center;
+  padding: 9px 18px;
+  border: none;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}

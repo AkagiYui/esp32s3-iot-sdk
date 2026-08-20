@@ -41,6 +41,9 @@ export default function RouteView() {
       (path) => {
         const leavingIds = layers.map((layer) => layer.id);
 
+        // 换页后回到顶部：hash 路由不会重置滚动位置，否则新页面会停在上一页的偏移上
+        window.scrollTo({ top: 0, behavior: "instant" });
+
         setLayers(
           produce((list) => {
             for (const layer of list) {

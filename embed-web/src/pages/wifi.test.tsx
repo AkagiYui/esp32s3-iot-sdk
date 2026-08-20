@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { cleanup, render, waitFor } from "@solidjs/testing-library";
+import { toasts } from "@/lib/feedback";
 import WifiPage from "./wifi";
 
 const fetchMock = vi.fn();
@@ -8,29 +9,36 @@ function jsonResponse(payload: unknown) {
   return {
     ok: true,
     status: 200,
+    statusText: "",
     json: () => Promise.resolve(payload),
-    text: () => Promise.resolve(JSON.stringify(payload)),
   } as Response;
 }
+
+const initialConfig = {
+  items: [
+    { ssid: "Kenko-Lab", has_password: true },
+    { ssid: "Guest", has_password: false },
+  ],
+  max_items: 16,
+};
 
 describe("WiFi 配置页", () => {
   beforeEach(() => {
     fetchMock.mockReset();
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
-      if (url === "/api/wifi-config" && (!init || init.method === undefined)) {
-        return Promise.resolve(
-          jsonResponse([
-            { ssid: "Kenko-Lab", password: "12345678" },
-            { ssid: "Guest", password: "" },
-          ]),
-        );
+      if (url === "/api/wifi/config" && init?.method === "PUT") {
+        return Promise.resolve(jsonResponse(initialConfig));
       }
-      if (url === "/api/wifi-config") {
-        return Promise.resolve(jsonResponse({ message: "ok" }));
+      if (url === "/api/wifi/config") {
+        return Promise.resolve(jsonResponse(initialConfig));
       }
-      if (url === "/api/wifi-scan") {
+      if (url.startsWith("/api/wifi/scan")) {
         return Promise.resolve(
-          jsonResponse([{ ssid: "Office-5G", rssi: -50, authmode: "WPA2_PSK" }]),
+          jsonResponse({
+            items: [
+              { ssid: "Office-5G", rssi: -50, channel: 6, authmode: "WPA2-PSK", secured: true },
+            ],
+          }),
         );
       }
       return Promise.reject(new Error(`unexpected request: ${url}`));
@@ -43,72 +51,53 @@ describe("WiFi 配置页", () => {
     vi.unstubAllGlobals();
   });
 
-  it("挂载后拉取并按优先级渲染已保存的网络", async () => {
+  it("渲染已保存的网络及其优先级", async () => {
     const { findByText, getByText } = render(() => <WifiPage />);
 
     await findByText("Kenko-Lab");
-    expect(getByText("Guest")).toBeInTheDocument();
-    expect(getByText("已保存 2 项")).toBeInTheDocument();
-    // 未展开时密码以圆点掩码显示
-    expect(getByText("密码：••••••••")).toBeInTheDocument();
-    expect(getByText("密码：开放网络 / 未填写")).toBeInTheDocument();
+    expect(getByText("优先级 1")).toBeInTheDocument();
+    expect(getByText("优先级 2")).toBeInTheDocument();
   });
 
-  it("编辑 SSID 时输入框不会被重建，焦点保持不变", async () => {
-    const { findAllByText, container } = render(() => <WifiPage />);
-
-    (await findAllByText("编辑"))[0]!.click();
-
-    const ssidInput = await waitFor(() => {
-      const input = container.querySelector<HTMLInputElement>('input[type="text"]');
-      expect(input).not.toBeNull();
-      return input!;
-    });
-
-    ssidInput.focus();
-    ssidInput.value = "Kenko-Lab-2";
-    ssidInput.dispatchEvent(new Event("input", { bubbles: true }));
-
-    await waitFor(() => {
-      const current = container.querySelector<HTMLInputElement>('input[type="text"]');
-      // 同一个 DOM 节点、值已更新、焦点没丢
-      expect(current).toBe(ssidInput);
-      expect(current!.value).toBe("Kenko-Lab-2");
-      expect(document.activeElement).toBe(ssidInput);
-    });
-  });
-
-  it("保存时提交去掉前端 id 的配置数组", async () => {
-    const { findByText } = render(() => <WifiPage />);
+  it("只展示是否已设密码，不展示密码本身", async () => {
+    const { findByText, getByText } = render(() => <WifiPage />);
 
     await findByText("Kenko-Lab");
-    (await findByText("保存")).click();
+    expect(getByText("已保存密码")).toBeInTheDocument();
+    expect(getByText("开放网络 / 无密码")).toBeInTheDocument();
+  });
+
+  it("未修改密码时保存会把 password 送成 null，让设备沿用旧值", async () => {
+    const { findByText, getAllByText } = render(() => <WifiPage />);
+
+    await findByText("Kenko-Lab");
+    getAllByText("保存")[0]!.click();
 
     await waitFor(() => {
       const put = fetchMock.mock.calls.find(
         (call) => (call[1] as RequestInit | undefined)?.method === "PUT",
-      ) as [string, RequestInit] | undefined;
-      expect(put).toBeDefined();
-      expect(typeof put![1].body).toBe("string");
-      expect(JSON.parse(put![1].body as string)).toEqual([
-        { ssid: "Kenko-Lab", password: "12345678" },
-        { ssid: "Guest", password: "" },
-      ]);
+      );
+      expect(put).toBeTruthy();
+      expect(JSON.parse((put![1] as RequestInit).body as string)).toEqual({
+        items: [
+          { ssid: "Kenko-Lab", password: null },
+          { ssid: "Guest", password: null },
+        ],
+      });
     });
   });
 
-  it("SSID 为空时拒绝保存并展开该项", async () => {
-    const { findByText, container } = render(() => <WifiPage />);
+  it("加载失败时弹出错误提示，而不是无声失败", async () => {
+    fetchMock.mockImplementation(() => Promise.reject(new TypeError("Failed to fetch")));
 
-    await findByText("Kenko-Lab");
-    (await findByText("新增")).click();
-    (await findByText("保存")).click();
+    const { findByText } = render(() => <WifiPage />);
 
+    // toast 由全局的 ToastHost 渲染，这里直接断言反馈层收到了消息
     await waitFor(() => {
       expect(
-        fetchMock.mock.calls.some((call) => (call[1] as RequestInit | undefined)?.method === "PUT"),
-      ).toBe(false);
-      expect(container.querySelector('input[type="text"]')).not.toBeNull();
+        toasts().some((toast) => toast.message === "无法连接到设备" && toast.type === "error"),
+      ).toBe(true);
     });
+    expect(await findByText("还没有任何 WiFi 配置，点击「新增」开始。")).toBeInTheDocument();
   });
 });

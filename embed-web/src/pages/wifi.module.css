@@ -1,223 +1,180 @@
-.wifiPage {
-  gap: 18px;
-}
-
-.toolbarActions,
-.toolbar,
-.cardTop,
-.cardActions,
-.ssidRow {
+.placeholder {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.toolbar {
-  align-items: stretch;
-}
-
-.toolbarActions {
-  justify-content: flex-end;
-}
-
-.summaryPill {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 14px;
-  min-height: 44px;
-  border-radius: 999px;
-  background: rgba(43, 122, 120, 0.1);
-  color: var(--accent-strong);
-  font-weight: 700;
-}
-
-.primaryBtn,
-.saveBtn,
-.chipBtn {
-  border: none;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.primaryBtn,
-.saveBtn {
-  display: inline-flex;
-  align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: 14px;
-  font-weight: 600;
-  background: var(--accent);
-  color: white;
-  box-shadow: var(--shadow-soft);
+  gap: 6px;
+  padding: 12px 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 12px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 14px;
 }
 
 .configList {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
-.configCard,
-.emptyCard {
-  padding: 18px;
+.configCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 22px;
-  background: var(--card-bg);
-  box-shadow: var(--shadow-soft);
+  border-radius: 14px;
+  background: var(--surface);
+  transition: border-color 0.18s ease;
 }
 
 .configCard.editing {
-  border-color: rgba(43, 122, 120, 0.32);
-  box-shadow: 0 20px 44px rgba(43, 122, 120, 0.12);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .orderBlock {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
 
 .dragHandle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  background: rgba(43, 122, 120, 0.1);
-  color: var(--accent);
-  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  cursor: grab;
 }
 
 .orderLabel {
-  margin-bottom: 4px;
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
 .orderBlock h3 {
-  font-size: 19px;
+  font-size: 15px;
   color: var(--text-h);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
-.chipBtn {
-  display: inline-flex;
+.cardActions {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(43, 122, 120, 0.08);
-  color: var(--accent-strong);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.chipBtn.danger {
-  background: rgba(199, 77, 60, 0.12);
-  color: var(--danger);
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .passwordPreview {
-  margin-top: 14px;
+  font-size: 13px;
   color: var(--muted);
-  font-size: 14px;
 }
 
 .editorGrid {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  margin-top: 16px;
 }
 
 .field {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field > span {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .ssidRow {
-  align-items: stretch;
+  display: flex;
+  gap: 8px;
 }
 
-.field span {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-h);
-}
-
-.field input,
-.passwordWrap {
-  width: 100%;
-  min-height: 46px;
+.ssidRow input,
+.passwordWrap input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 11px;
   border: 1px solid var(--border);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.64);
-}
-
-.field input {
-  padding: 0 14px;
+  border-radius: 11px;
+  background: var(--surface-strong);
   color: var(--text-h);
-  outline: none;
+  font-size: 14px;
 }
 
-.field input:focus,
-.passwordWrap:focus-within {
-  border-color: rgba(43, 122, 120, 0.42);
-  box-shadow: 0 0 0 4px rgba(43, 122, 120, 0.12);
+.ssidRow input:focus-visible,
+.passwordWrap input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .passwordWrap {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
+  padding-left: 10px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-strong);
   color: var(--muted);
 }
 
 .passwordWrap input {
-  min-height: 44px;
   border: none;
   background: transparent;
-  padding: 0;
-  box-shadow: none;
+  padding-left: 0;
 }
 
-.ssidPickerBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 46px;
-  padding: 0 14px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: rgba(43, 122, 120, 0.08);
-  color: var(--accent-strong);
-  font-weight: 700;
-  white-space: nowrap;
+.cancelEdit {
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 
-.emptyCard {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
+.keepPassword {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 11px;
+  border: 1px dashed var(--border);
+  border-radius: 11px;
+  background: transparent;
   color: var(--muted);
-  text-align: center;
-  padding: 32px 18px;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
 }
 
-@media (min-width: 900px) {
-  .editorGrid {
-    grid-template-columns: 1fr 1fr;
+.keepPassword:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .configCard {
+    transition: none;
   }
 }

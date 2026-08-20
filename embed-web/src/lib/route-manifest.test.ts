@@ -34,10 +34,17 @@ describe("页面清单", () => {
     expect(routeEntries.map((entry) => entry.path)).toEqual([
       "/",
       "/dashboard",
-      "/settings",
       "/wifi",
+      "/firmware",
+      "/settings",
     ]);
-    expect(routeEntries.map((entry) => entry.label)).toEqual(["首页", "仪表盘", "设置", "WiFi"]);
+    expect(routeEntries.map((entry) => entry.label)).toEqual([
+      "首页",
+      "仪表盘",
+      "WiFi",
+      "固件",
+      "设置",
+    ]);
   });
 
   it("每个页面都提供组件和图标", () => {

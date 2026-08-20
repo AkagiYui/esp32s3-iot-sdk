@@ -1,7 +1,18 @@
-import { createSignal } from "solid-js";
-import { ChartColumn, LayoutDashboard, Lightbulb, Radio, Sun } from "lucide-solid";
+import { For, Show } from "solid-js";
+import {
+  ChartColumn,
+  HardDrive,
+  LayoutDashboard,
+  MemoryStick,
+  Microchip,
+  Radio,
+} from "lucide-solid";
+import Card from "@/components/Card";
+import InfoRow from "@/components/InfoRow";
+import Meter from "@/components/Meter";
+import { systemInfo } from "@/lib/device";
+import { formatBytes, signalBars, signalLevel } from "@/lib/format";
 import type { RouteMeta } from "@/lib/route-manifest";
-import { cx } from "@/lib/cx";
 import styles from "./dashboard.module.css";
 
 export const routeMeta: RouteMeta = {
@@ -10,87 +21,133 @@ export const routeMeta: RouteMeta = {
   order: 1,
 };
 
+const PARTITION_LABELS: Record<string, string> = {
+  storage: "配置分区",
+  web: "前端资源分区",
+};
+
 export default function DashboardPage() {
-  const [ledOn, setLedOn] = createSignal(false);
-  const [brightness, setBrightness] = createSignal(75);
+  const info = systemInfo;
+
+  const heapUsed = () => {
+    const runtime = info()?.runtime;
+    if (!runtime) return 0;
+    return Math.max(0, runtime.total_heap - runtime.free_heap);
+  };
 
   return (
     <div class="page">
-      <div class={cx("page-header", styles.pageHeader)}>
+      <div class="page-header">
         <h1>仪表盘</h1>
-        <p class={cx("subtitle", styles.subtitle)}>设备控制与监控</p>
+        <p class="subtitle">运行指标与硬件信息</p>
       </div>
 
-      <div class={styles.controlList}>
-        <div class={styles.controlItem}>
-          <div class={styles.controlInfo}>
-            <span class={styles.controlIcon}>
-              <Lightbulb size={24} />
-            </span>
-            <div>
-              <h3>LED 灯</h3>
-              <p>{ledOn() ? "已开启" : "已关闭"}</p>
-            </div>
-          </div>
-          <button
-            class={cx(styles.toggle, ledOn() && styles.active)}
-            aria-label="切换 LED 灯"
-            aria-pressed={ledOn()}
-            onClick={() => setLedOn(!ledOn())}
-          >
-            <span class={styles.toggleKnob} />
-          </button>
-        </div>
+      <Show
+        when={info()}
+        fallback={
+          <Card>
+            <p class={styles.placeholder}>正在读取运行指标…</p>
+          </Card>
+        }
+      >
+        {(data) => (
+          <>
+            <Card icon={MemoryStick} title="内存">
+              <Meter
+                label="内部 RAM 占用"
+                used={heapUsed()}
+                total={data().runtime.total_heap}
+                detail={`${formatBytes(heapUsed())} / ${formatBytes(data().runtime.total_heap)}`}
+              />
+              <InfoRow label="当前可用" value={formatBytes(data().runtime.free_heap)} />
+              <InfoRow
+                label="历史最低可用"
+                value={formatBytes(data().runtime.min_free_heap)}
+                hint="启动至今的水位线"
+              />
+            </Card>
 
-        <div class={styles.controlItem}>
-          <div class={styles.controlInfo}>
-            <span class={styles.controlIcon}>
-              <Sun size={24} />
-            </span>
-            <div>
-              <h3>亮度</h3>
-              <p>{brightness()}%</p>
-            </div>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            aria-label="亮度"
-            value={brightness()}
-            onInput={(event) => setBrightness(event.currentTarget.valueAsNumber)}
-            class={styles.slider}
-          />
-        </div>
+            <Card icon={HardDrive} title="存储">
+              <For each={Object.entries(data().filesystem)}>
+                {([label, usage]) => (
+                  <Show
+                    when={usage.mounted}
+                    fallback={
+                      <InfoRow
+                        label={PARTITION_LABELS[label] ?? label}
+                        value="未挂载"
+                        tone="danger"
+                      />
+                    }
+                  >
+                    <Meter
+                      label={PARTITION_LABELS[label] ?? label}
+                      used={usage.used}
+                      total={usage.total}
+                      detail={`${formatBytes(usage.used)} / ${formatBytes(usage.total)}`}
+                    />
+                  </Show>
+                )}
+              </For>
+            </Card>
 
-        <div class={styles.controlItem}>
-          <div class={styles.controlInfo}>
-            <span class={styles.controlIcon}>
-              <ChartColumn size={24} />
-            </span>
-            <div>
-              <h3>内存使用</h3>
-              <p>124 KB / 320 KB</p>
-            </div>
-          </div>
-          <div class={styles.progressBar}>
-            <div class={styles.progressFill} style={{ width: "39%" }} />
-          </div>
-        </div>
+            <Card icon={Radio} title="无线">
+              <Show
+                when={data().wifi.connected}
+                fallback={<InfoRow label="STA 连接" value="未连接" tone="muted" />}
+              >
+                <div class={styles.signalRow}>
+                  <div class={styles.signalBars} aria-hidden="true">
+                    <For each={[1, 2, 3, 4]}>
+                      {(bar) => (
+                        <span
+                          class={styles.bar}
+                          classList={{ [styles.barActive!]: signalBars(data().wifi.rssi) >= bar }}
+                          style={{ height: `${6 + bar * 5}px` }}
+                        />
+                      )}
+                    </For>
+                  </div>
+                  <div class={styles.signalText}>
+                    <strong>{data().wifi.rssi} dBm</strong>
+                    <span>{signalLevel(data().wifi.rssi)}</span>
+                  </div>
+                </div>
+                <InfoRow label="SSID" value={data().wifi.ssid} />
+                <InfoRow label="信道" value={data().wifi.channel} />
+                <InfoRow label="网关" value={data().wifi.gateway} mono />
+                <InfoRow label="子网掩码" value={data().wifi.netmask} mono />
+              </Show>
+              <InfoRow label="工作模式" value={data().wifi.mode.toUpperCase()} mono />
+              <Show when={data().wifi.ap_active}>
+                <InfoRow label="热点接入数" value={`${data().wifi.ap_clients} 台`} />
+              </Show>
+            </Card>
 
-        <div class={styles.controlItem}>
-          <div class={styles.controlInfo}>
-            <span class={styles.controlIcon}>
-              <Radio size={24} />
-            </span>
-            <div>
-              <h3>RSSI 信号</h3>
-              <p>-42 dBm</p>
-            </div>
-          </div>
-          <span class={cx(styles.badge, styles.good)}>良好</span>
-        </div>
-      </div>
+            <Card icon={Microchip} title="硬件">
+              <InfoRow
+                label="芯片"
+                value={`${data().chip.model} ${data().chip.revision}`}
+                hint={`${data().chip.cores} 核`}
+              />
+              <InfoRow label="Flash" value={formatBytes(data().chip.flash_size)} />
+              <InfoRow
+                label="PSRAM"
+                value={data().chip.psram_size > 0 ? formatBytes(data().chip.psram_size) : "未启用"}
+                tone={data().chip.psram_size > 0 ? "default" : "muted"}
+              />
+            </Card>
+
+            <Card icon={ChartColumn} title="固件">
+              <InfoRow label="版本号" value={`#${data().firmware.version}`} />
+              <InfoRow label="提交" value={data().firmware.name} mono />
+              <InfoRow label="构建时间" value={data().firmware.build_time} mono />
+              <InfoRow label="ESP-IDF" value={data().firmware.idf_version} mono />
+              <InfoRow label="运行分区" value={data().firmware.running_partition} mono />
+            </Card>
+          </>
+        )}
+      </Show>
     </div>
   );
 }

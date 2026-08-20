@@ -1,0 +1,91 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    background 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sm {
+  padding: 7px 11px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+
+.block {
+  width: 100%;
+}
+
+.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.secondary {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: var(--border);
+  color: var(--accent);
+}
+
+.secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.danger {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 32%, transparent);
+  color: var(--danger);
+}
+
+.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--muted);
+}
+
+.ghost:hover:not(:disabled) {
+  color: var(--text-h);
+}
+
+.spinner {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .spinner {
+    transition: none;
+    animation: none;
+  }
+}

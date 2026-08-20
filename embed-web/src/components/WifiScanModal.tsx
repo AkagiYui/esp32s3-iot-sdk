@@ -1,7 +1,8 @@
 import { For, onCleanup, Show } from "solid-js";
 import { RefreshCw, Signal, Wifi, X } from "lucide-solid";
 import { createPresence } from "@/lib/presence";
-import { signalLevel, type WifiScanEntry } from "@/lib/wifi";
+import { signalLevel } from "@/lib/format";
+import type { WifiScanEntry } from "@/lib/wifi";
 import { cx } from "@/lib/cx";
 import styles from "./WifiScanModal.module.css";
 
@@ -84,7 +85,9 @@ export default function WifiScanModal(props: WifiScanModalProps) {
                       </div>
                       <div class={styles.ssidStack}>
                         <strong>{network.ssid}</strong>
-                        <span>{network.authmode}</span>
+                        <span>
+                          {network.authmode} · CH{network.channel}
+                        </span>
                       </div>
                     </div>
                     <span class={styles.quality}>{signalLevel(network.rssi)}</span>
