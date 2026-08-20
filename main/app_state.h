@@ -1,37 +1,14 @@
 #pragma once
 
-#include <stdbool.h>
-
 #include "esp_err.h"
 
-typedef enum {
-    APP_STATE_BOOT = 0,
-    APP_STATE_PROVISIONING, /**< SoftAP + captive portal，等待用户填写 WiFi */
-    APP_STATE_CONNECTING,   /**< 正在按优先级逐个尝试已保存的配置 */
-    APP_STATE_ONLINE,       /**< 已连上路由器并拿到 IP */
-    APP_STATE_OFFLINE,      /**< 曾经在线但已掉线，正在重连 */
-} app_state_t;
-
-typedef enum {
-    APP_EVENT_START = 0,
-    APP_EVENT_ENTER_PROVISIONING,
-    APP_EVENT_APPLY_WIFI_CONFIG, /**< 配置被改写，立刻用新配置重连 */
-    APP_EVENT_WIFI_CONNECTED,
-    APP_EVENT_WIFI_LOST,
-    APP_EVENT_SETTINGS_CHANGED,
-    APP_EVENT_REBOOT,
-    APP_EVENT_FACTORY_RESET,
-} app_event_t;
-
-/** 启动状态机任务。上下文是模块内的静态实例，不依赖调用方的栈。 */
+/**
+ * 启动应用状态机。
+ *
+ * 状态机订阅 KENKO_EVENT 事件基，把事件转投到自己的队列里由独立任务处理——
+ * 事件回调运行在默认事件循环任务上，而这里的处理动作包含等待任务退出、
+ * 格式化分区、延迟重启这类耗时操作，直接在回调里做会把 WiFi/IP 事件一起堵住。
+ *
+ * 当前状态通过 kenko_state_get() 读取，组件不需要反向依赖本模块。
+ */
 esp_err_t app_state_start(void);
-
-/** 投递事件；队列满时丢弃并记日志，绝不阻塞调用方（可能是 ISR 之外的任意任务）。 */
-void app_state_post_event(app_event_t event);
-
-app_state_t app_state_get(void);
-
-const char *app_state_name(app_state_t state);
-
-/** 设备当前是否处于配网模式。 */
-bool app_state_is_provisioning(void);

@@ -1,0 +1,64 @@
+menu "Kenko board"
+
+    config KENKO_DEVICE_PREFIX
+        string "Device name prefix"
+        default "kenko32"
+        help
+            出厂默认设备名与 mDNS 主机名的前缀，最终形式为 <prefix>-<mac 后四位>。
+
+    menu "Status LED"
+
+        config KENKO_WS2812_GPIO
+            int "WS2812 data GPIO"
+            range 0 48
+            default 48
+            help
+                板载 WS2812B 的数据脚。源地 YD-ESP32-S3 上是 GPIO 47 或 48。
+
+        config KENKO_LED_DEFAULT_BRIGHTNESS
+            int "Default brightness (%)"
+            range 0 100
+            default 100
+
+        config KENKO_LED_TASK_STACK
+            int "LED task stack size"
+            default 3072
+
+        config KENKO_LED_TASK_PRIORITY
+            int "LED task priority"
+            default 4
+
+    endmenu
+
+    menu "BOOT button"
+
+        config KENKO_BUTTON_GPIO
+            int "Button GPIO"
+            range 0 48
+            default 0
+            help
+                默认上拉、按下接地。ESP32-S3 上 GPIO 0 同时是下载模式的 strapping 脚。
+
+        config KENKO_BUTTON_POLL_INTERVAL_MS
+            int "Poll interval (ms)"
+            default 50
+
+        config KENKO_BUTTON_PROVISIONING_MS
+            int "Long press to enter provisioning (ms)"
+            default 5000
+
+        config KENKO_BUTTON_FACTORY_RESET_MS
+            int "Long press to factory reset (ms)"
+            default 10000
+
+        config KENKO_BUTTON_TASK_STACK
+            int "Button task stack size"
+            default 3072
+
+        config KENKO_BUTTON_TASK_PRIORITY
+            int "Button task priority"
+            default 5
+
+    endmenu
+
+endmenu

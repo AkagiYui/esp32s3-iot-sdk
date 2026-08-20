@@ -37,7 +37,7 @@ if(NOT KENKO_BUILD_TIMESTAMP)
 endif()
 
 configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/main/firmware_version.h.in
+    ${CMAKE_CURRENT_SOURCE_DIR}/components/kenko_board/firmware_version.h.in
     ${CMAKE_BINARY_DIR}/generated/firmware_version.h
     @ONLY
 )

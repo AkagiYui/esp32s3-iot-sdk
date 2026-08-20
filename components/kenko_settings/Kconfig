@@ -1,0 +1,20 @@
+menu "Kenko settings"
+
+    config KENKO_DEFAULT_TIMEZONE
+        string "Default POSIX timezone"
+        default "CST-8"
+        help
+            POSIX TZ 串。中国标准时间是 CST-8，UTC 是 UTC0。
+
+    config KENKO_SETTINGS_DEFAULT_BRIGHTNESS
+        int "Default status LED brightness (%)"
+        range 0 100
+        default 100
+
+    config KENKO_SETTINGS_FILE_NAME
+        string "Settings file name"
+        default "settings.json"
+        help
+            相对于配置分区挂载点的文件名。
+
+endmenu

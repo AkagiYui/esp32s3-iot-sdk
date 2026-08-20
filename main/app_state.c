@@ -2,17 +2,19 @@
 
 #include <string.h>
 
-#include "app_config.h"
 #include "device_info.h"
 #include "dns_captive.h"
 #include "esp_check.h"
+#include "esp_event.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "kenko_core.h"
 #include "mdns.h"
 #include "ota_service.h"
+#include "sdkconfig.h"
 #include "settings_store.h"
 #include "status_led.h"
 #include "storage_fs.h"
@@ -24,44 +26,12 @@
 static const char *TAG = "app_state";
 
 #define APP_EVENT_QUEUE_LENGTH 8
-#define APP_REBOOT_GRACE_MS 800
 
-/* 状态机的上下文是模块内的静态实例：app_main 返回后它的栈会被回收，
- * 任何指向那块内存的指针都会悬空。 */
 static struct {
     QueueHandle_t queue;
-    app_state_t state;
     bool mdns_running;
     bool storage_degraded;
 } s_ctx;
-
-const char *app_state_name(app_state_t state)
-{
-    switch (state) {
-    case APP_STATE_BOOT:
-        return "boot";
-    case APP_STATE_PROVISIONING:
-        return "provisioning";
-    case APP_STATE_CONNECTING:
-        return "connecting";
-    case APP_STATE_ONLINE:
-        return "online";
-    case APP_STATE_OFFLINE:
-        return "offline";
-    default:
-        return "unknown";
-    }
-}
-
-app_state_t app_state_get(void)
-{
-    return s_ctx.state;
-}
-
-bool app_state_is_provisioning(void)
-{
-    return s_ctx.state == APP_STATE_PROVISIONING;
-}
 
 static void stop_mdns(void)
 {
@@ -101,7 +71,7 @@ static void start_mdns(void)
         {.key = "device", .value = identity->default_name},
         {.key = "fw", .value = identity->firmware_name},
     };
-    if (mdns_service_add(NULL, "_http", "_tcp", KENKO_HTTP_PORT, txt, sizeof(txt) / sizeof(txt[0])) !=
+    if (mdns_service_add(NULL, "_http", "_tcp", CONFIG_KENKO_HTTP_PORT, txt, sizeof(txt) / sizeof(txt[0])) !=
         ESP_OK) {
         ESP_LOGW(TAG, "mdns service add failed");
     }
@@ -110,13 +80,14 @@ static void start_mdns(void)
     ESP_LOGI(TAG, "mDNS started as %s.local", identity->mdns_hostname);
 }
 
-static void set_state(app_state_t state)
+static void set_state(kenko_state_t state)
 {
-    if (s_ctx.state == state) {
+    kenko_state_t previous = kenko_state_get();
+    if (previous == state) {
         return;
     }
-    ESP_LOGI(TAG, "state %s -> %s", app_state_name(s_ctx.state), app_state_name(state));
-    s_ctx.state = state;
+    ESP_LOGI(TAG, "state %s -> %s", kenko_state_name(previous), kenko_state_name(state));
+    kenko_state_set(state);
 }
 
 /** 配置分区挂不上时用红色闪烁把故障暴露出来，其余状态各有配色。 */
@@ -127,18 +98,18 @@ static void refresh_led(void)
         return;
     }
 
-    switch (s_ctx.state) {
-    case APP_STATE_PROVISIONING:
+    switch (kenko_state_get()) {
+    case KENKO_STATE_PROVISIONING:
         status_led_set(KENKO_LED_BLUE, LED_PATTERN_SOLID);
         break;
-    case APP_STATE_CONNECTING:
-    case APP_STATE_OFFLINE:
+    case KENKO_STATE_CONNECTING:
+    case KENKO_STATE_OFFLINE:
         status_led_set(KENKO_LED_BLUE, LED_PATTERN_BREATHING);
         break;
-    case APP_STATE_ONLINE:
+    case KENKO_STATE_ONLINE:
         status_led_set(KENKO_LED_GREEN, LED_PATTERN_SOLID);
         break;
-    case APP_STATE_BOOT:
+    case KENKO_STATE_BOOT:
     default:
         status_led_set(KENKO_LED_ORANGE, LED_PATTERN_SOLID);
         break;
@@ -147,9 +118,10 @@ static void refresh_led(void)
 
 static void enter_provisioning(void)
 {
-    set_state(APP_STATE_PROVISIONING);
+    set_state(KENKO_STATE_PROVISIONING);
     stop_mdns();
     time_sync_stop();
+
     esp_err_t err = wifi_manager_start_provisioning_ap();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "start provisioning AP failed: %s", esp_err_to_name(err));
@@ -163,7 +135,7 @@ static void enter_provisioning(void)
 
 static void enter_connecting(void)
 {
-    set_state(APP_STATE_CONNECTING);
+    set_state(KENKO_STATE_CONNECTING);
     dns_captive_stop();
     wifi_manager_stop_provisioning_ap();
     refresh_led();
@@ -176,7 +148,7 @@ static void enter_connecting(void)
 
 static void enter_online(void)
 {
-    set_state(APP_STATE_ONLINE);
+    set_state(KENKO_STATE_ONLINE);
     dns_captive_stop();
     wifi_manager_stop_provisioning_ap();
     start_mdns();
@@ -189,26 +161,26 @@ static void enter_online(void)
 
 static void handle_wifi_lost(void)
 {
-    if (s_ctx.state == APP_STATE_PROVISIONING) {
+    if (kenko_state_is_provisioning()) {
         return;
     }
 
-    set_state(APP_STATE_OFFLINE);
+    set_state(KENKO_STATE_OFFLINE);
     stop_mdns();
     time_sync_stop();
     refresh_led();
 
     esp_err_t err = wifi_manager_start_sta_loop();
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "start sta loop failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "restart sta loop failed: %s", esp_err_to_name(err));
     }
 }
 
 static void reboot_after_grace(void)
 {
-    ESP_LOGW(TAG, "rebooting in %d ms", APP_REBOOT_GRACE_MS);
+    ESP_LOGW(TAG, "rebooting in %d ms", CONFIG_KENKO_REBOOT_GRACE_MS);
     /* 留一点时间让 HTTP 响应发完，否则前端只会看到连接被重置。 */
-    vTaskDelay(pdMS_TO_TICKS(APP_REBOOT_GRACE_MS));
+    vTaskDelay(pdMS_TO_TICKS(CONFIG_KENKO_REBOOT_GRACE_MS));
     esp_restart();
 }
 
@@ -245,7 +217,7 @@ static void handle_settings_changed(void)
 static void app_state_task(void *arg)
 {
     (void)arg;
-    app_event_t event;
+    kenko_event_id_t event;
 
     for (;;) {
         if (xQueueReceive(s_ctx.queue, &event, portMAX_DELAY) != pdTRUE) {
@@ -253,7 +225,7 @@ static void app_state_task(void *arg)
         }
 
         switch (event) {
-        case APP_EVENT_START:
+        case KENKO_EVENT_START:
             if (!wifi_config_store_has_entries()) {
                 ESP_LOGI(TAG, "no saved wifi config, entering provisioning");
                 enter_provisioning();
@@ -262,13 +234,13 @@ static void app_state_task(void *arg)
             }
             break;
 
-        case APP_EVENT_ENTER_PROVISIONING:
-            if (s_ctx.state != APP_STATE_PROVISIONING) {
+        case KENKO_EVENT_ENTER_PROVISIONING:
+            if (!kenko_state_is_provisioning()) {
                 enter_provisioning();
             }
             break;
 
-        case APP_EVENT_APPLY_WIFI_CONFIG:
+        case KENKO_EVENT_APPLY_WIFI_CONFIG:
             if (wifi_config_store_has_entries()) {
                 enter_connecting();
             } else {
@@ -276,23 +248,23 @@ static void app_state_task(void *arg)
             }
             break;
 
-        case APP_EVENT_WIFI_CONNECTED:
+        case KENKO_EVENT_WIFI_CONNECTED:
             enter_online();
             break;
 
-        case APP_EVENT_WIFI_LOST:
+        case KENKO_EVENT_WIFI_LOST:
             handle_wifi_lost();
             break;
 
-        case APP_EVENT_SETTINGS_CHANGED:
+        case KENKO_EVENT_SETTINGS_CHANGED:
             handle_settings_changed();
             break;
 
-        case APP_EVENT_REBOOT:
+        case KENKO_EVENT_REBOOT:
             reboot_after_grace();
             break;
 
-        case APP_EVENT_FACTORY_RESET:
+        case KENKO_EVENT_FACTORY_RESET:
             handle_factory_reset();
             break;
 
@@ -303,13 +275,30 @@ static void app_state_task(void *arg)
     }
 }
 
+/** 事件回调只负责转投；真正的处理放在状态机任务里，不占用事件循环。 */
+static void on_kenko_event(void *arg, esp_event_base_t base, int32_t event_id, void *data)
+{
+    (void)arg;
+    (void)base;
+    (void)data;
+
+    kenko_event_id_t event = (kenko_event_id_t)event_id;
+    if (xQueueSend(s_ctx.queue, &event, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "event queue full, dropped event %d", (int)event_id);
+    }
+}
+
 esp_err_t app_state_start(void)
 {
-    s_ctx.state = APP_STATE_BOOT;
+    kenko_state_set(KENKO_STATE_BOOT);
     s_ctx.storage_degraded = !storage_fs_storage_available();
 
-    s_ctx.queue = xQueueCreate(APP_EVENT_QUEUE_LENGTH, sizeof(app_event_t));
+    s_ctx.queue = xQueueCreate(APP_EVENT_QUEUE_LENGTH, sizeof(kenko_event_id_t));
     ESP_RETURN_ON_FALSE(s_ctx.queue != NULL, ESP_ERR_NO_MEM, TAG, "event queue alloc failed");
+
+    ESP_RETURN_ON_ERROR(
+        esp_event_handler_instance_register(KENKO_EVENT, ESP_EVENT_ANY_ID, &on_kenko_event, NULL, NULL), TAG,
+        "register kenko event handler failed");
 
     /* Web 服务在两种模式下都要在线，一次启动后就不再停。
      * 起不来也不应该拖垮整个设备：联网、状态灯、按键这些仍然要工作。 */
@@ -318,21 +307,9 @@ esp_err_t app_state_start(void)
         ESP_LOGE(TAG, "web server start failed: %s", esp_err_to_name(web_err));
     }
 
-    BaseType_t created = xTaskCreate(app_state_task, "app_state", KENKO_TASK_STACK_STATE, NULL,
-                                     KENKO_TASK_PRIORITY_STATE, NULL);
+    BaseType_t created = xTaskCreate(app_state_task, "app_state", CONFIG_KENKO_STATE_TASK_STACK, NULL,
+                                     CONFIG_KENKO_STATE_TASK_PRIORITY, NULL);
     ESP_RETURN_ON_FALSE(created == pdPASS, ESP_ERR_NO_MEM, TAG, "state task create failed");
 
-    app_state_post_event(APP_EVENT_START);
-    return ESP_OK;
-}
-
-void app_state_post_event(app_event_t event)
-{
-    if (s_ctx.queue == NULL) {
-        return;
-    }
-
-    if (xQueueSend(s_ctx.queue, &event, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "event queue full, dropped event %d", (int)event);
-    }
+    return kenko_event_post(KENKO_EVENT_START);
 }

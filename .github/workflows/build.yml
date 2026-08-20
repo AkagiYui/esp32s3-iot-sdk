@@ -58,6 +58,7 @@ jobs:
           python3 -m venv /tmp/clang-format-venv
           /tmp/clang-format-venv/bin/pip install --quiet clang-format==20.1.7
           /tmp/clang-format-venv/bin/clang-format --dry-run --Werror \
+            components/*/*.c components/*/include/*.h \
             main/*.c main/*.h test/host/*.c test/host/*.h
 
   firmware:

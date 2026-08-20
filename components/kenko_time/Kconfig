@@ -1,0 +1,11 @@
+menu "Kenko time"
+
+    config KENKO_SNTP_SERVER_PRIMARY
+        string "Primary NTP server"
+        default "ntp.aliyun.com"
+
+    config KENKO_SNTP_SERVER_SECONDARY
+        string "Secondary NTP server"
+        default "pool.ntp.org"
+
+endmenu

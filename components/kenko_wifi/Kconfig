@@ -1,0 +1,100 @@
+menu "Kenko WiFi"
+
+    menu "Provisioning SoftAP"
+
+        config KENKO_AP_IP
+            string "SoftAP IPv4 address"
+            default "192.168.6.1"
+            help
+                配网热点的固定地址，同时作为网关与 captive portal 的 DNS 应答。
+
+        config KENKO_AP_NETMASK
+            string "SoftAP netmask"
+            default "255.255.255.0"
+
+        config KENKO_AP_CHANNEL
+            int "SoftAP channel"
+            range 1 13
+            default 1
+
+        config KENKO_AP_MAX_CONNECTION
+            int "SoftAP max clients"
+            range 1 10
+            default 4
+
+        config KENKO_DNS_PORT
+            int "Captive portal DNS port"
+            default 53
+
+        config KENKO_DNS_TTL_SECONDS
+            int "Captive portal DNS answer TTL"
+            default 60
+
+        config KENKO_DNS_TASK_STACK
+            int "DNS task stack size"
+            default 4096
+
+        config KENKO_DNS_TASK_PRIORITY
+            int "DNS task priority"
+            default 4
+
+    endmenu
+
+    menu "Station"
+
+        config KENKO_WIFI_MAX_SAVED_NETWORKS
+            int "Maximum saved networks"
+            range 1 32
+            default 16
+
+        config KENKO_WIFI_CONFIG_FILE_NAME
+            string "Saved networks file name"
+            default "wifi_config.json"
+
+        config KENKO_WIFI_CONNECT_TIMEOUT_MS
+            int "Per-attempt connect timeout (ms)"
+            default 15000
+
+        config KENKO_WIFI_RETRY_BACKOFF_MS
+            int "Backoff after a full round of failures (ms)"
+            default 10000
+
+        config KENKO_WIFI_SCAN_CACHE_TTL_MS
+            int "Scan result cache TTL (ms)"
+            default 15000
+            help
+                扫描会短暂打断连接，缓存可以避免页面反复刷新时反复扫描。
+
+        config KENKO_WIFI_SCAN_MAX_RESULTS
+            int "Maximum scan results kept"
+            range 4 64
+            default 32
+
+        config KENKO_WIFI_TASK_STACK
+            int "Connect loop task stack size"
+            default 4096
+
+        config KENKO_WIFI_TASK_PRIORITY
+            int "Connect loop task priority"
+            default 5
+
+        choice KENKO_WIFI_POWER_SAVE
+            prompt "Station power save mode"
+            default KENKO_WIFI_PS_MIN_MODEM
+            help
+                默认的 MIN_MODEM 会带来最多一个 DTIM 周期的延迟抖动。
+                做低延迟控制时选 NONE，电池供电时选 MAX_MODEM。
+
+            config KENKO_WIFI_PS_NONE
+                bool "None (lowest latency)"
+
+            config KENKO_WIFI_PS_MIN_MODEM
+                bool "Minimum modem"
+
+            config KENKO_WIFI_PS_MAX_MODEM
+                bool "Maximum modem (lowest power)"
+        endchoice
+
+    endmenu
+
+endmenu

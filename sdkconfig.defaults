@@ -51,6 +51,11 @@ CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
 CONFIG_LOG_COLORS=y
 
+# ---- FreeRTOS ----
+# uxTaskGetSystemState() 需要它，用来采集所有任务的栈水位并通过接口暴露。
+CONFIG_FREERTOS_USE_TRACE_FACILITY=y
+CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS=y
+
 # ---- 看门狗 ----
 # 10 秒：OTA 写 flash 与 WiFi 扫描都可能让某个任务长时间不让出。
 CONFIG_ESP_TASK_WDT_INIT=y

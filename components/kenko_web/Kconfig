@@ -1,0 +1,26 @@
+menu "Kenko web server"
+
+    config KENKO_HTTP_PORT
+        int "HTTP port"
+        default 80
+
+    config KENKO_HTTPD_TASK_STACK
+        int "HTTP server task stack size"
+        default 8192
+        help
+            静态资源处理里有若干 KB 的栈上缓冲（路径消毒、文件分块），留足余量。
+
+    config KENKO_HTTPD_MAX_SOCKETS
+        int "Maximum open sockets"
+        range 1 13
+        default 7
+
+    config KENKO_API_BODY_MAX_BYTES
+        int "Maximum JSON request body"
+        default 4096
+
+    config KENKO_OTA_CHUNK_BYTES
+        int "OTA receive chunk size"
+        default 2048
+
+endmenu

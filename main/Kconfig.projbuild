@@ -1,0 +1,17 @@
+menu "Kenko application"
+
+    config KENKO_STATE_TASK_STACK
+        int "State machine task stack size"
+        default 4096
+
+    config KENKO_STATE_TASK_PRIORITY
+        int "State machine task priority"
+        default 6
+
+    config KENKO_REBOOT_GRACE_MS
+        int "Delay before restarting (ms)"
+        default 800
+        help
+            留给 HTTP 响应发完的时间，否则前端只会看到连接被重置。
+
+endmenu

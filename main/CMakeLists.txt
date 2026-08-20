@@ -1,44 +1,18 @@
+# 应用层：启动序列与状态机。功能实现全部在 components/ 下，可被别的项目单独复用。
 idf_component_register(
     SRCS
-        "api_handlers.c"
         "app_main.c"
         "app_state.c"
-        "button_monitor.c"
-        "device_info.c"
-        "dns_captive.c"
-        "dns_message.c"
-        "http_utils.c"
-        "json_file.c"
-        "led_color.c"
-        "ota_service.c"
-        "settings_store.c"
-        "status_led.c"
-        "storage_fs.c"
-        "time_sync.c"
-        "web_server.c"
-        "wifi_config_store.c"
-        "wifi_manager.c"
+    INCLUDE_DIRS "."
     PRIV_REQUIRES
-        app_update
-        bootloader_support
-        esp_app_format
-        esp_driver_gpio
-        esp_driver_rmt
         esp_event
-        esp_http_server
-        esp_hw_support
-        esp_netif
-        esp_psram
-        esp_timer
-        esp_wifi
-        espcoredump
-        espressif__cjson
-        espressif__led_strip
         espressif__mdns
-        joltwallet__littlefs
-        lwip
-        nvs_flash
-        spi_flash
-    INCLUDE_DIRS
-        "."
-        "${CMAKE_BINARY_DIR}/generated")
+        kenko_board
+        kenko_core
+        kenko_ota
+        kenko_settings
+        kenko_storage
+        kenko_time
+        kenko_web
+        kenko_wifi
+        nvs_flash)

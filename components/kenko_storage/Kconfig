@@ -1,0 +1,30 @@
+menu "Kenko storage"
+
+    config KENKO_STORAGE_PARTITION
+        string "Config partition label"
+        default "storage"
+        help
+            存放 WiFi 凭据与设备设置的 LittleFS 分区。挂载失败时会被自动格式化。
+
+    config KENKO_STORAGE_BASE_PATH
+        string "Config partition mount point"
+        default "/storage"
+
+    config KENKO_WEB_PARTITION
+        string "Web asset partition label"
+        default "web"
+        help
+            存放前端构建产物的 LittleFS 分区。挂载失败时不会格式化，
+            以免把页面抹掉；Web 服务会退化为内置兜底页。
+
+    config KENKO_WEB_BASE_PATH
+        string "Web asset partition mount point"
+        default "/web"
+
+    config KENKO_JSON_FILE_MAX_BYTES
+        int "Maximum size of a JSON config file"
+        default 8192
+        help
+            超过这个大小的配置文件会被拒绝解析，防止损坏的文件把堆吃光。
+
+endmenu

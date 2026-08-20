@@ -25,10 +25,12 @@ curl -fsSL https://vite.plus | bash
 | 前端 lint + 类型检查 | `vp -C embed-web check` |
 | 前端单测 | `vp -C embed-web test` |
 | 前端开发服务器（自带设备 API 模拟层） | `vp -C embed-web dev` |
-| C 代码格式校验 | `clang-format --dry-run --Werror main/*.c main/*.h` |
+| C 代码格式校验 | `clang-format --dry-run --Werror components/*/*.c components/*/include/*.h main/*.c main/*.h` |
 
 ## 约定
 
 - `sdkconfig` 是构建产物，不要提交；配置真源是 `sdkconfig.defaults`，改动后需要 `idf.py fullclean`。
-- `main/` 下与 ESP-IDF 解耦的纯逻辑模块（`led_color.c`、`dns_message.c`、`http_utils.c`）必须保持可在 host 上编译，改动时同步更新 `test/host/`。
+- 功能实现全部在 `components/kenko_*` 下，`main/` 只保留启动序列与状态机。组件之间通过 `kenko_core` 的事件基通信，不允许组件反向依赖 `main/`。
+- 与 ESP-IDF 解耦的纯逻辑模块（`kenko_board/led_color.c`、`kenko_wifi/dns_message.c`、`kenko_web/http_utils.c`）必须保持可在 host 上编译，改动时同步更新 `test/host/`。
+- 可调参数一律走 Kconfig（`CONFIG_KENKO_*`），不要在源码里写死。
 - 提交信息使用 Conventional Commits。

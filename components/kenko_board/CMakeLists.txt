@@ -1,0 +1,19 @@
+# 板级支持：设备身份、状态灯、按键。
+idf_component_register(
+    SRCS
+        "device_info.c"
+        "led_color.c"
+        "status_led.c"
+        "button_monitor.c"
+    INCLUDE_DIRS
+        "include"
+        "${CMAKE_BINARY_DIR}/generated"
+    REQUIRES
+        kenko_core
+    PRIV_REQUIRES
+        esp_driver_gpio
+        esp_driver_rmt
+        esp_hw_support
+        esp_psram
+        espressif__led_strip
+        spi_flash)
