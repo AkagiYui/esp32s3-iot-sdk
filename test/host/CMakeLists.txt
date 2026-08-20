@@ -4,7 +4,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(kenko_host_tests C)
 
-set(CMAKE_C_STANDARD 17)
+# 与 ESP-IDF v6 保持一致：固件侧用 -std=gnu23 编译，host 测试编的是同一批源文件，
+# 标准不一致就失去了「本机先跑一遍」的意义。CMake 会按编译器版本挑 gnu23 / gnu2x。
+set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 enable_testing()

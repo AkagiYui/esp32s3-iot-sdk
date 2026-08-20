@@ -29,11 +29,7 @@ const PARTITION_LABELS: Record<string, string> = {
 export default function DashboardPage() {
   const info = systemInfo;
 
-  const heapUsed = () => {
-    const runtime = info()?.runtime;
-    if (!runtime) return 0;
-    return Math.max(0, runtime.total_heap - runtime.free_heap);
-  };
+  const used = (heap: { total: number; free: number }) => Math.max(0, heap.total - heap.free);
 
   return (
     <div class="page">
@@ -55,16 +51,34 @@ export default function DashboardPage() {
             <Card icon={MemoryStick} title="内存">
               <Meter
                 label="内部 RAM 占用"
-                used={heapUsed()}
-                total={data().runtime.total_heap}
-                detail={`${formatBytes(heapUsed())} / ${formatBytes(data().runtime.total_heap)}`}
+                used={used(data().runtime.heap.internal)}
+                total={data().runtime.heap.internal.total}
+                detail={
+                  `${formatBytes(used(data().runtime.heap.internal))} / ` +
+                  `${formatBytes(data().runtime.heap.internal.total)}`
+                }
               />
-              <InfoRow label="当前可用" value={formatBytes(data().runtime.free_heap)} />
               <InfoRow
                 label="历史最低可用"
-                value={formatBytes(data().runtime.min_free_heap)}
+                value={formatBytes(data().runtime.heap.internal.min_free)}
                 hint="启动至今的水位线"
               />
+              <InfoRow
+                label="最大连续块"
+                value={formatBytes(data().runtime.heap.internal.largest_free_block)}
+                hint="明显小于剩余量说明堆已碎片化"
+              />
+
+              <Show when={data().runtime.heap.psram}>
+                {(psram) => (
+                  <Meter
+                    label="PSRAM 占用"
+                    used={used(psram())}
+                    total={psram().total}
+                    detail={`${formatBytes(used(psram()))} / ${formatBytes(psram().total)}`}
+                  />
+                )}
+              </Show>
             </Card>
 
             <Card icon={HardDrive} title="存储">

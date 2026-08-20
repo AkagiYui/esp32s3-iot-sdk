@@ -232,6 +232,26 @@ static cJSON *build_wifi_json(void)
     return wifi;
 }
 
+/* 内部 RAM 与 PSRAM 必须分开统计。开了 PSRAM 之后，esp_get_free_heap_size() 返回的是
+ * 两者之和（8MB 量级），拿它去和内部 RAM 的总量相减只会得到负数。 */
+#define HEAP_CAPS_INTERNAL (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+#define HEAP_CAPS_PSRAM (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+
+static cJSON *build_heap_json(uint32_t caps)
+{
+    cJSON *heap = cJSON_CreateObject();
+    if (heap == NULL) {
+        return NULL;
+    }
+
+    cJSON_AddNumberToObject(heap, "free", (double)heap_caps_get_free_size(caps));
+    cJSON_AddNumberToObject(heap, "total", (double)heap_caps_get_total_size(caps));
+    cJSON_AddNumberToObject(heap, "min_free", (double)heap_caps_get_minimum_free_size(caps));
+    /* 最大连续块比剩余总量更能说明碎片化程度。 */
+    cJSON_AddNumberToObject(heap, "largest_free_block", (double)heap_caps_get_largest_free_block(caps));
+    return heap;
+}
+
 static esp_err_t system_info_handler(httpd_req_t *req)
 {
     if (req->method != HTTP_GET && req->method != HTTP_HEAD) {
@@ -280,10 +300,13 @@ static esp_err_t system_info_handler(httpd_req_t *req)
 
     cJSON *runtime = cJSON_CreateObject();
     cJSON_AddNumberToObject(runtime, "uptime_ms", (double)(esp_timer_get_time() / 1000));
-    cJSON_AddNumberToObject(runtime, "free_heap", esp_get_free_heap_size());
-    cJSON_AddNumberToObject(runtime, "min_free_heap", esp_get_minimum_free_heap_size());
-    cJSON_AddNumberToObject(runtime, "total_heap",
-                            (double)heap_caps_get_total_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+
+    cJSON *heap = cJSON_CreateObject();
+    cJSON_AddItemToObject(heap, "internal", build_heap_json(HEAP_CAPS_INTERNAL));
+    if (identity->psram_size > 0) {
+        cJSON_AddItemToObject(heap, "psram", build_heap_json(HEAP_CAPS_PSRAM));
+    }
+    cJSON_AddItemToObject(runtime, "heap", heap);
     cJSON_AddItemToObject(root, "runtime", runtime);
 
     char timestamp[40] = {0};

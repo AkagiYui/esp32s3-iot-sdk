@@ -8,6 +8,14 @@ export type FilesystemUsage = {
   used: number;
 };
 
+export type HeapStats = {
+  free: number;
+  total: number;
+  min_free: number;
+  /** 最大连续可分配块，比剩余总量更能说明碎片化程度。 */
+  largest_free_block: number;
+};
+
 export type SystemInfo = {
   device: {
     name: string;
@@ -35,9 +43,11 @@ export type SystemInfo = {
   };
   runtime: {
     uptime_ms: number;
-    free_heap: number;
-    min_free_heap: number;
-    total_heap: number;
+    heap: {
+      internal: HeapStats;
+      /** 仅在设备启用了 PSRAM 时出现。 */
+      psram?: HeapStats;
+    };
   };
   time: {
     synced: boolean;
@@ -82,6 +92,7 @@ const monitor = createRoot(() => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let interval = POLL_INTERVAL_MS;
   let subscribers = 0;
+  let paused = false;
 
   async function refresh(): Promise<SystemInfo | undefined> {
     setLoading(true);
@@ -104,6 +115,9 @@ const monitor = createRoot(() => {
 
   function schedule(): void {
     clearTimeout(timer);
+    if (paused || subscribers === 0) {
+      return;
+    }
     timer = setTimeout(() => {
       void refresh().finally(() => {
         if (subscribers > 0) {
@@ -111,6 +125,25 @@ const monitor = createRoot(() => {
         }
       });
     }, interval);
+  }
+
+  /**
+   * 暂停轮询。
+   *
+   * 设备端的 HTTP 服务是单任务顺序处理请求的，OTA 上传会独占它十几秒，
+   * 期间任何轮询都只会排队然后超时，把"失联"横幅误弹出来。
+   */
+  function setPaused(next: boolean): void {
+    paused = next;
+    if (paused) {
+      clearTimeout(timer);
+      timer = undefined;
+      return;
+    }
+    if (subscribers > 0) {
+      interval = POLL_INTERVAL_MS;
+      void refresh().finally(schedule);
+    }
   }
 
   /**
@@ -136,7 +169,7 @@ const monitor = createRoot(() => {
     };
   }
 
-  return { systemInfo, lastError, reachable, loading, refresh, subscribe };
+  return { systemInfo, lastError, reachable, loading, refresh, subscribe, setPaused };
 });
 
 export const {
@@ -146,4 +179,5 @@ export const {
   loading: deviceLoading,
   refresh: refreshSystemInfo,
   subscribe: subscribeDevice,
+  setPaused: setDevicePollingPaused,
 } = monitor;

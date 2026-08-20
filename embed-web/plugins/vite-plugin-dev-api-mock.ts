@@ -97,9 +97,20 @@ export function devApiMock(): Plugin {
     },
     runtime: {
       uptime_ms: Date.now() - startedAt,
-      free_heap: 212_344,
-      min_free_heap: 186_120,
-      total_heap: 341_000,
+      heap: {
+        internal: {
+          free: 212_344,
+          total: 341_000,
+          min_free: 186_120,
+          largest_free_block: 110_592,
+        },
+        psram: {
+          free: 8_200_192,
+          total: 8_388_608,
+          min_free: 8_150_016,
+          largest_free_block: 8_126_464,
+        },
+      },
     },
     time: {
       synced: true,

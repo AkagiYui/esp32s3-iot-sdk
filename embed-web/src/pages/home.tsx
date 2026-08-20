@@ -121,8 +121,8 @@ export default function HomePage() {
               />
               <InfoRow
                 label="可用内存"
-                value={formatBytes(data().runtime.free_heap)}
-                hint={`历史最低 ${formatBytes(data().runtime.min_free_heap)}`}
+                value={formatBytes(data().runtime.heap.internal.free)}
+                hint={`内部 RAM，历史最低 ${formatBytes(data().runtime.heap.internal.min_free)}`}
               />
             </Card>
 

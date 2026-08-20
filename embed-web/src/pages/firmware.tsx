@@ -15,7 +15,7 @@ import Card from "@/components/Card";
 import InfoRow from "@/components/InfoRow";
 import Meter from "@/components/Meter";
 import { describeError } from "@/lib/api";
-import { rebootDevice, refreshSystemInfo, systemInfo } from "@/lib/device";
+import { rebootDevice, refreshSystemInfo, setDevicePollingPaused, systemInfo } from "@/lib/device";
 import { showConfirm, showToast } from "@/lib/feedback";
 import {
   confirmFirmware,
@@ -113,6 +113,9 @@ export default function FirmwarePage() {
     controller = new AbortController();
     setUploading(true);
     setSent(0);
+    /* 设备的 HTTP 服务顺序处理请求，上传会独占它十几秒；
+     * 期间继续轮询只会排队超时，把「失联」横幅误弹出来。 */
+    setDevicePollingPaused(true);
     try {
       const result = await uploadFirmware(selected, (loaded) => setSent(loaded), controller.signal);
       setStatus(result);
@@ -122,6 +125,7 @@ export default function FirmwarePage() {
       void loadStatus();
     } finally {
       setUploading(false);
+      setDevicePollingPaused(false);
       controller = undefined;
     }
   }
@@ -167,7 +171,10 @@ export default function FirmwarePage() {
   }
 
   onMount(() => void loadStatus());
-  onCleanup(() => controller?.abort());
+  onCleanup(() => {
+    controller?.abort();
+    setDevicePollingPaused(false);
+  });
 
   return (
     <div class="page">
