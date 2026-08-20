@@ -1,75 +1,120 @@
 # ESP32-S3 IoT SDK
 
-本次学习旨在为 ESP32-S3 编写一个简单的 SDK 固件，用于后续项目开发。
-当前固件已经实现了基于 WiFi 的基础联网流程、设备状态指示、LittleFS 配置存储，以及用于静态页面托管和设备信息查询的 Web 服务。
+本项目为 ESP32-S3 提供一套可复用的基础固件：WiFi 联网与配网、状态指示、配置持久化、
+内置 Web 控制台、OTA 升级与时间同步，供后续项目直接在其上开发。
 
 > [!CAUTION]
 > 该项目仅供学习和参考，不应用于生产环境。
+> 设备接口没有任何鉴权，同一局域网内的任何人都能调用。
 
 使用开发板：源地工作室(VCC-GND Studio) YD-ESP32-S3 Type-A-V1.5，板载模组 ESP32-S3-WROOM-1-N16R8。
-带有 CH343P USB 转串口芯片，支持 USB 连接和编程，内置SRAM 512KB，内置ROM 384KB，外扩PSRAM 8MB，外扩Flash 16MB。
+带有 CH343P USB 转串口芯片，支持 USB 连接和编程，内置 SRAM 512KB，内置 ROM 384KB，外扩 PSRAM 8MB，外扩 Flash 16MB。
 直通转出了 ESP32-S3 的 USB 接口，支持 USB OTG 功能。
 
-板载一颗 WS2812B RGB LED，连接到 GPIO 47 或 GPIO 48 。
+板载一颗 WS2812B RGB LED，连接到 GPIO 47 或 GPIO 48。
 板载一颗轻触开关(BOOT)，连接到 GPIO 0，默认上拉，按下时接地。
 
 ## SDK 功能
 
-- [x] LittleFS 文件系统挂载
-- [x] 使用 JSON 文件存储多组 WiFi 配置
+- [x] LittleFS 文件系统挂载（配置分区挂不上时自动格式化，前端分区缺失时退化为内置兜底页）
+- [x] 使用 JSON 文件存储多组 WiFi 配置（原子写入，掉电不会留下半截文件）
 - [x] 无 WiFi 配置时自动进入 AP 配网模式
 - [x] SoftAP + DHCP + DNS captive portal
-- [x] Web 服务器静态文件托管
-- [x] 设备信息 GET API
-- [x] 已联网状态下启动 mDNS，支持 `.local` 域名访问
-- [x] 按顺序循环尝试已保存的 WiFi 配置
-- [x] BOOT 键长按进入配网或清空配置
-- [x] WS2812 状态灯指示当前系统状态
-- [x] WiFi 配置前端页面与提交接口
+- [x] 按顺序循环尝试已保存的 WiFi 配置，一轮失败后退避重试
+- [x] 已联网状态下启动 mDNS，支持 `.local` 域名访问并公告 `_http._tcp` 服务
+- [x] BOOT 键长按进入配网（5s）或恢复出厂设置（10s）
+- [x] WS2812 状态灯指示当前系统状态，亮度可调
+- [x] 内置 Web 控制台：静态资源托管 + 完整 REST 接口
+- [x] WiFi 配置的读写、扫描与即时连接
+- [x] 设备设置持久化（设备名、时区、NTP 开关、状态灯亮度）
+- [x] SNTP 时间同步与时区设置
+- [x] OTA 升级：上传、镜像校验、双分区切换、失败自动回滚
+- [x] 重启与恢复出厂设置
+- [x] Coredump 落盘，Web 页面可查看与擦除，崩溃现场可事后分析
 - [ ] 蓝牙配网或设备控制
 - [ ] MQTT 通信
 
-使用 LittleFS 作为文件系统，将 Web 页面和配置文件保存在 Flash 中。
-
 ## 系统状态
 
-| LED状态 | 通用含义                                         |
-| ------- | ------------------------------------------------ |
-| 常亮    | 设备正常工作中，无需任何操作                     |
-| 闪烁    | 设备忙碌中，无法进行其他操作，或正在等待用户操作 |
+| LED 状态 | 通用含义                                         |
+| -------- | ------------------------------------------------ |
+| 常亮     | 设备正常工作中，无需任何操作                     |
+| 呼吸     | 设备忙碌中，正在尝试连接                         |
+| 闪烁     | 需要注意：正在执行破坏性操作，或存在硬件故障     |
 
-| LED状态  | 含义                             |
-| -------- | -------------------------------- |
-| 橙色常亮 | 设备已上电，但未进行其他任何行为 |
-| 蓝色呼吸 | 设备正在尝试连接 WiFi            |
-| 蓝色常亮 | 设备处于配网模式，等待用户操作   |
-| 绿色常亮 | 设备已连接网络                   |
+| LED 状态 | 含义                                     |
+| -------- | ---------------------------------------- |
+| 橙色常亮 | 设备已上电，尚未进入任何工作状态         |
+| 蓝色呼吸 | 正在尝试连接 WiFi                        |
+| 蓝色常亮 | 处于配网模式，等待用户操作               |
+| 绿色常亮 | 已连接网络                               |
+| 紫色闪烁 | 正在恢复出厂设置                         |
+| 红色闪烁 | 配置分区不可用，设置无法持久化           |
 
 ### 配网模式
 
-- [x] 设备进入 AP 模式，SSID 为 `kenko32-xxxx`
+- [x] 设备进入 **APSTA** 模式，SSID 为设备名（默认 `kenko32-xxxx`）
 - [x] AP 为开放网络，无密码
 - [x] AP 地址固定为 `192.168.6.1`
 - [x] 启动 DHCP 服务器，网关和 DNS 指向设备自身
-- [x] 启动 DNS 服务器，将任意域名解析到 `192.168.6.1`
-- [x] 启动 Web 服务器，提供静态资源和设备信息接口
+- [x] 启动 DNS 服务器，把 A 查询解析到 `192.168.6.1`（AAAA 返回空 NOERROR，客户端会自行回退）
+- [x] 各系统的联网探测地址会被重定向到配网页
+- [x] 通过 Web 页面提交 WiFi SSID 和密码并立即连接
 - [x] LED 显示蓝色常亮
-- [ ] 通过 Web 页面提交 WiFi SSID 和密码
 
-### 设备内置 Web 的功能
+> 用 APSTA 而不是纯 AP 是必须的：`esp_wifi_scan_start()` 需要 STA 接口在线，
+> 而扫描周边热点恰恰是配网页面最需要的能力。
+
+### 设备内置 Web 服务
+
+静态资源：
 
 - [x] 托管 `web` 分区中的静态文件
-- [x] 支持 `GET` 和 `HEAD`
-- [x] 根据 `Accept-Encoding` 按顺序尝试返回预压缩静态资源
-- [x] 支持 `.br`、`.gz`、`.zst` 预压缩文件
-- [x] 提供 `GET /api/device-info` 设备信息接口
-- [x] 提供 `GET/PUT /api/wifi-config` 多组 WiFi 配置读写接口
-- [x] 提供 `GET /api/wifi-scan` 附近 WiFi 扫描接口
-- [x] 提供 captive portal 常见探测地址的重定向
-- [x] 设置 STA 模式的目标 SSID 和密码
-- [ ] 设置时区
-- [ ] 恢复出厂设置页面
-- [ ] 重启设备页面
+- [x] 支持 `GET` 和 `HEAD`，其它方法返回 `405`
+- [x] 按 `Accept-Encoding` 的 q 值与压缩率协商，优先下发 `.br` / `.zst` / `.gz`
+- [x] `ETag` + `304 Not Modified`，静态资源带 `Cache-Control`
+- [x] 路径做百分号解码并拒绝 `..`、反斜杠与非法转义
+- [x] 单页应用回落到 `index.html`，回落路径同样走编码协商
+
+REST 接口：
+
+| 接口 | 说明 |
+|------|------|
+| `GET /api/system/info` | 设备、芯片、固件、运行时、时间、网络、文件系统的完整快照 |
+| `POST /api/system/reboot` | 重启设备 |
+| `POST /api/system/factory-reset` | 清空全部配置并重启进入配网 |
+| `GET /api/system/ota` | 升级状态与 OTA 分区容量 |
+| `POST /api/system/ota` | 上传固件（请求体为原始 `.bin`） |
+| `POST /api/system/ota/confirm` | 确认当前镜像可用，取消回滚 |
+| `GET/DELETE /api/system/coredump` | 查询 / 擦除设备上保存的崩溃现场 |
+| `GET/PUT /api/settings` | 设备名、时区、NTP 开关、状态灯亮度 |
+| `GET /api/wifi/status` | 当前连接状态 |
+| `GET /api/wifi/scan` | 扫描附近热点（`?force=1` 跳过设备端缓存） |
+| `GET/PUT /api/wifi/config` | 读写多组 WiFi 配置 |
+| `POST /api/wifi/connect` | 用已保存的配置连接，关闭配网热点 |
+| `POST /api/wifi/provision` | 重新进入配网模式 |
+
+错误一律返回 `{"error":{"code":"...","message":"..."}}`；未知的 `/api` 路径返回 `404` 而不是首页。
+
+> `GET /api/wifi/config` **不会回传明文密码**，只给出 `has_password`。
+> `PUT` 时把某条的 `password` 置为 `null` 即表示沿用设备上已保存的那一份。
+
+## 分区布局
+
+16MB Flash，双 OTA，无 factory 分区（首次烧录直接进 `ota_0`）：
+
+| 分区 | 类型 | 偏移 | 大小 |
+|------|------|------|------|
+| `nvs` | data/nvs | `0x9000` | 24 KB |
+| `otadata` | data/ota | `0xF000` | 8 KB |
+| `phy_init` | data/phy | `0x11000` | 4 KB |
+| `coredump` | data/coredump | `0x12000` | 64 KB |
+| `ota_0` | app | `0x30000` | 3 MB |
+| `ota_1` | app | `0x330000` | 3 MB |
+| `web` | data/littlefs | `0x630000` | 4 MB |
+| `storage` | data/littlefs | `0xA30000` | 5.8 MB |
+
+`web` 存放前端构建产物，`storage` 存放 WiFi 配置与设备设置。
 
 ## 构建
 
@@ -93,6 +138,12 @@ vp -C embed-web install
 cmake --build build --target merged_bin
 ```
 
+烧录：
+
+```bash
+esptool --chip esp32s3 --flash-mode dio --flash-size 16MB --flash-freq 80m write-flash 0x0 build/kenko-iot-sdk-merged.bin
+```
+
 前端可以脱离硬件单独开发，`vp dev` 自带设备 API 的模拟层：
 
 ```bash
@@ -100,3 +151,59 @@ vp -C embed-web dev
 ```
 
 详见 [embed-web/README.md](embed-web/README.md)。
+
+### 配置真源
+
+`sdkconfig` 是构建产物，**不纳入版本控制**。配置的真源是 `sdkconfig.defaults`，
+改动后需要 `idf.py fullclean` 或删掉 `build/` 与 `sdkconfig` 再构建。
+
+其中几项值得注意：
+
+- `CONFIG_SPIRAM=y` + `CONFIG_SPIRAM_MODE_OCT=y`：启用模组自带的 8MB Octal PSRAM。
+  换用非 R8 型号的模组时必须关掉，否则无法启动。
+- `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`：新固件启动后必须被确认，
+  否则下次重启自动回退。固件在进入配网或联网状态时会自动确认。
+- `CONFIG_ESPTOOLPY_FLASHMODE_DIO`：保持 DIO。S3 模组上 QIO 的收益有限，
+  而个别 flash 颗粒在 80MHz QIO 下并不稳定。
+
+## 测试
+
+固件里与 ESP-IDF 解耦的纯逻辑模块（HSV 转换、DNS 报文构造、HTTP 路径与编码协商）
+可以直接在开发机上编译运行，不需要硬件也不需要 QEMU：
+
+```bash
+cmake -S test/host -B build-host && cmake --build build-host && ctest --test-dir build-host
+```
+
+前端：
+
+```bash
+vp -C embed-web check && vp -C embed-web test
+```
+
+## 目录结构
+
+```text
+main/                 # 固件源码
+  app_main.c          # 启动序列
+  app_state.c         # 状态机（boot / provisioning / connecting / online / offline）
+  wifi_manager.c      # STA 连接循环、SoftAP、异步扫描
+  wifi_config_store.c # 多组 WiFi 配置的持久化
+  settings_store.c    # 设备设置的持久化
+  web_server.c        # 静态资源服务
+  api_handlers.c      # REST 接口
+  ota_service.c       # OTA 写入、校验与回滚
+  time_sync.c         # SNTP 与时区
+  dns_captive.c       # captive portal 的 DNS 服务
+  status_led.c        # WS2812 状态灯
+  button_monitor.c    # BOOT 键长按
+  storage_fs.c        # LittleFS 挂载
+  device_info.c       # 启动时采集的硬件与固件身份
+  json_file.c         # 原子的 JSON 文件读写
+  http_utils.c        # 路径消毒、MIME、编码协商（纯逻辑，可 host 单测）
+  dns_message.c       # DNS 应答构造（纯逻辑，可 host 单测）
+  led_color.c         # HSV/RGB 与呼吸曲线（纯逻辑，可 host 单测）
+embed-web/            # 设备内置 Web 前端（SolidJS + Vite+）
+test/host/            # 固件纯逻辑模块的 host 端单测
+tools/                # 独立的硬件验证子项目（WS2812 点灯 / 跑马灯）
+```

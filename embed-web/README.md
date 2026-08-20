@@ -170,19 +170,20 @@ src/
 
 页面消费的全部是 `main/api_handlers.c` 提供的真实接口，没有任何占位假数据：
 
-| 接口 | 用途 |
-|------|------|
-| `GET /api/system/info` | 设备、芯片、固件、运行时、时间、网络、文件系统的完整快照 |
-| `POST /api/system/reboot` | 重启设备 |
-| `POST /api/system/factory-reset` | 清空配置并重启 |
-| `GET/POST /api/system/ota` | 查询升级状态 / 上传固件 |
-| `POST /api/system/ota/confirm` | 确认当前镜像，取消回滚 |
-| `GET/PUT /api/settings` | 设备名、时区、NTP 开关、状态灯亮度 |
-| `GET /api/wifi/status` | 当前连接状态 |
-| `GET /api/wifi/scan` | 扫描附近热点（`?force=1` 跳过设备端缓存） |
-| `GET/PUT /api/wifi/config` | 读写多组 WiFi 配置 |
-| `POST /api/wifi/connect` | 用已保存的配置连接，关闭配网热点 |
-| `POST /api/wifi/provision` | 重新进入配网模式 |
+| 接口                              | 用途                                                     |
+| --------------------------------- | -------------------------------------------------------- |
+| `GET /api/system/info`            | 设备、芯片、固件、运行时、时间、网络、文件系统的完整快照 |
+| `POST /api/system/reboot`         | 重启设备                                                 |
+| `POST /api/system/factory-reset`  | 清空配置并重启                                           |
+| `GET/POST /api/system/ota`        | 查询升级状态 / 上传固件                                  |
+| `POST /api/system/ota/confirm`    | 确认当前镜像，取消回滚                                   |
+| `GET/DELETE /api/system/coredump` | 查询 / 擦除设备上保存的崩溃现场                          |
+| `GET/PUT /api/settings`           | 设备名、时区、NTP 开关、状态灯亮度                       |
+| `GET /api/wifi/status`            | 当前连接状态                                             |
+| `GET /api/wifi/scan`              | 扫描附近热点（`?force=1` 跳过设备端缓存）                |
+| `GET/PUT /api/wifi/config`        | 读写多组 WiFi 配置                                       |
+| `POST /api/wifi/connect`          | 用已保存的配置连接，关闭配网热点                         |
+| `POST /api/wifi/provision`        | 重新进入配网模式                                         |
 
 两条必须遵守的约定：
 
