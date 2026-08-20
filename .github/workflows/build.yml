@@ -75,6 +75,13 @@ jobs:
       - name: Trust the workspace
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      # 便宜的检查放在构建之前，快速失败
+      - name: Check Kconfig style
+        run: |
+          . "$IDF_PATH/export.sh"
+          python -m kconfcheck components/*/Kconfig main/Kconfig.projbuild
+          python -m kconfcheck --check deprecated components/*/Kconfig main/Kconfig.projbuild
+
       # ESP-IDF 容器是 Ubuntu，Vite+ 自带 Node.js 与包管理器供给
       - name: Set up Vite+
         uses: voidzero-dev/setup-vp@v1.17.0
@@ -115,6 +122,15 @@ jobs:
           python "$IDF_PATH/tools/idf_tools.py" install esp-clang
           . "$IDF_PATH/export.sh"
           ./tools/clang-check.sh
+
+      - name: Static analysis (cppcheck)
+        run: |
+          apt-get update -qq && apt-get install -y -qq cppcheck
+          . "$IDF_PATH/export.sh"
+          ./tools/cppcheck.sh
+
+      - name: Firmware size budget
+        run: python3 tools/check-size.py
 
       - name: Upload clang-tidy report
         if: always()

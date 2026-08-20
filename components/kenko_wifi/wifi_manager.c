@@ -205,7 +205,11 @@ static bool interruptible_delay(uint32_t delay_ms)
 
 static bool try_connect(const wifi_credential_t *credential)
 {
-    wifi_config_t config = {0};
+    /* wifi_config_t 是 union 且最大成员不是第一个，`= {0}` 只保证第一个成员被清零，
+     * 其余字节按标准是未指定的。这里必须 memset，否则 bssid/channel/failure_retry_cnt
+     * 这些我们没显式赋值的字段会是垃圾。 */
+    wifi_config_t config;
+    memset(&config, 0, sizeof(config));
     strlcpy((char *)config.sta.ssid, credential->ssid, sizeof(config.sta.ssid));
     strlcpy((char *)config.sta.password, credential->password, sizeof(config.sta.password));
     config.sta.threshold.authmode = WIFI_AUTH_OPEN;
@@ -375,7 +379,9 @@ esp_err_t wifi_manager_start_provisioning_ap(void)
     app_settings_t settings;
     settings_store_get(&settings);
 
-    wifi_config_t config = {0};
+    /* 同上：union 的 `= {0}` 不保证整体清零。 */
+    wifi_config_t config;
+    memset(&config, 0, sizeof(config));
     strlcpy((char *)config.ap.ssid, settings.device_name, sizeof(config.ap.ssid));
     config.ap.ssid_len = (uint8_t)strnlen((const char *)config.ap.ssid, sizeof(config.ap.ssid));
     config.ap.channel = CONFIG_KENKO_AP_CHANNEL;

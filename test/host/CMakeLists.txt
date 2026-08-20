@@ -25,6 +25,16 @@ add_compile_options(
     -Wtype-limits
 )
 
+# 这三个模块直接处理不可信输入（HTTP 路径、DNS 报文），越界与未定义行为
+# 靠肉眼和编译器告警都看不出来，交给 sanitizer。
+# -fno-sanitize-recover=all 让 UBSan 直接中止，否则它只打印一行、测试照样"通过"。
+option(KENKO_SANITIZE "Build host tests with AddressSanitizer and UndefinedBehaviorSanitizer" ON)
+
+if(KENKO_SANITIZE)
+    add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+
 function(kenko_add_host_test name component source)
     add_executable(${name} ${name}.c ${COMPONENTS_DIR}/${component}/${source})
     target_include_directories(${name} PRIVATE
@@ -36,3 +46,14 @@ endfunction()
 kenko_add_host_test(test_led_color kenko_board led_color.c)
 kenko_add_host_test(test_dns_message kenko_wifi dns_message.c)
 kenko_add_host_test(test_http_utils kenko_web http_utils.c)
+
+# 随机输入测试同时链接两个解析器，价值主要来自跑在 sanitizer 下
+add_executable(test_fuzz
+    test_fuzz.c
+    ${COMPONENTS_DIR}/kenko_wifi/dns_message.c
+    ${COMPONENTS_DIR}/kenko_web/http_utils.c)
+target_include_directories(test_fuzz PRIVATE
+    ${COMPONENTS_DIR}/kenko_wifi/include
+    ${COMPONENTS_DIR}/kenko_web/include
+    ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME test_fuzz COMMAND test_fuzz)

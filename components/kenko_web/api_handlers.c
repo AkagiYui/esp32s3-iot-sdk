@@ -110,7 +110,7 @@ static esp_err_t read_body(httpd_req_t *req, char **out)
 {
     *out = NULL;
 
-    if (req->content_len <= 0) {
+    if (req->content_len == 0) {
         return ESP_ERR_INVALID_SIZE;
     }
     if (req->content_len > API_BODY_MAX_BYTES) {
@@ -527,7 +527,7 @@ static cJSON *build_ota_json(void)
 
 static esp_err_t ota_upload(httpd_req_t *req)
 {
-    if (req->content_len <= 0) {
+    if (req->content_len == 0) {
         return send_error(req, 400, "empty_body", "firmware body is empty");
     }
 
