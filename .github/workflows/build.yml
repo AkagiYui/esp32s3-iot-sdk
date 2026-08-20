@@ -125,7 +125,10 @@ jobs:
 
       - name: Static analysis (cppcheck)
         run: |
+          # 容器镜像标签是钉死的，所以 apt 里的 cppcheck 版本也是稳定的（当前 2.13）。
+          # 本地用 brew 装的版本通常更新，两边的检查结果可能有细微差异。
           apt-get update -qq && apt-get install -y -qq cppcheck
+          cppcheck --version
           . "$IDF_PATH/export.sh"
           ./tools/cppcheck.sh
 
