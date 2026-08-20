@@ -211,7 +211,7 @@ cmake --build build --target merged_bin
 烧录：
 
 ```bash
-esptool --chip esp32s3 --flash-mode dio --flash-size 16MB --flash-freq 80m write-flash 0x0 build/kenko-iot-sdk-merged.bin
+esptool --chip esp32s3 write-flash --flash-mode dio --flash-size 16MB --flash-freq 80m 0x0 build/kenko-iot-sdk-merged.bin
 ```
 
 前端可以脱离硬件单独开发，`vp dev` 自带设备 API 的模拟层：

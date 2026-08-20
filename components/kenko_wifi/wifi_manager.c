@@ -389,7 +389,14 @@ esp_err_t wifi_manager_start_provisioning_ap(void)
     config.ap.authmode = WIFI_AUTH_OPEN;
     config.ap.pmf_cfg.required = false;
 
-    /* APSTA 而不是纯 AP：扫描周边热点需要 STA 接口在线。 */
+    /*
+     * APSTA 而不是纯 AP：扫描周边热点需要 STA 接口在线。
+     *
+     * 顺序不能反：esp_wifi_set_config(WIFI_IF_AP) 在 AP 接口尚未启用时会返回
+     * ESP_ERR_WIFI_MODE，配网热点根本起不来（实测过）。代价是切到 APSTA 会先用
+     * 默认 SSID 把 AP 拉起来，紧接着 set_config 又让它重启一次，日志里能看到
+     * 两次 AP_START——这是 ESP-IDF 接口契约决定的，不是可以"优化"掉的。
+     */
     ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_APSTA), TAG, "set APSTA mode failed");
     ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_AP, &config), TAG, "set AP config failed");
 

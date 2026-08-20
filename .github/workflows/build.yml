@@ -170,8 +170,11 @@ jobs:
           s       = args['flash_settings']
           chip    = args['extra_esptool_args']['chip']
           sha     = os.environ.get('GITHUB_SHA', 'unknown')[:8]
-          flags   = (f"--chip {chip} --flash-mode {s['flash_mode']} "
-                     f"--flash-size {s['flash_size']} --flash-freq {s['flash_freq']}")
+          # esptool v5 里 --flash-* 是 write-flash 的子命令选项，必须放在子命令之后，
+          # 放前面会直接报 "No such option"。
+          chip_flag = f"--chip {chip}"
+          flash_flags = (f"--flash-mode {s['flash_mode']} "
+                         f"--flash-size {s['flash_size']} --flash-freq {s['flash_freq']}")
           files   = sorted(args['flash_files'].items(), key=lambda item: int(item[0], 16))
 
           md = [
@@ -180,7 +183,7 @@ jobs:
               "## 准备\n\n```bash\npip install esptool\n```\n\n",
               "## 全量烧录（新板初始化，推荐）\n\n",
               "```bash\n",
-              f"esptool {flags} write-flash 0x0 {project}-merged.bin\n",
+              f"esptool {chip_flag} write-flash {flash_flags} 0x0 {project}-merged.bin\n",
               "```\n\n",
               "## 单分区烧录\n\n",
               "| 文件 | 偏移地址 |\n|------|----------|\n",
@@ -189,13 +192,13 @@ jobs:
               md.append(f"| `{path.split('/')[-1]}` | `{offset}` |\n")
 
           md.append("\n```bash\n")
-          md.append(f"esptool {flags} write-flash \\\n")
+          md.append(f"esptool {chip_flag} write-flash {flash_flags} \\\n")
           md.append(" \\\n".join(f"  {offset} {path.split('/')[-1]}" for offset, path in files))
           md.append("\n```\n\n")
           md += [
               "## 只更新固件（保留已保存的配置）\n\n",
               "```bash\n",
-              f"esptool {flags} write-flash "
+              f"esptool {chip_flag} write-flash {flash_flags} "
               f"{[o for o, p in files if p.endswith(project + '.bin')][0]} {project}.bin\n",
               "```\n",
           ]
