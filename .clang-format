@@ -1,14 +1,21 @@
-Language: Cpp # 语言
-BasedOnStyle: Google # 格式风格
-IndentWidth: 4 # 缩进宽度
-AlignAfterOpenBracket: BlockIndent # 左大括号后是否换行
-BinPackArguments: false # false: 函数实参要么都在同一行，要么都各自一行
-BinPackParameters: false # false: 函数形参要么都在同一行，要么都各自一行
-AlignTrailingComments: true # 对齐连续的尾随的注释
-ColumnLimit: 100 # 一行字符上限
-AllowShortBlocksOnASingleLine: Empty # false: 不允许单行代码块, Empty: 允许空的代码块
-AllowShortFunctionsOnASingleLine: Empty # None: 不允许单行函数, Empty: 允许空的函数
-SeparateDefinitionBlocks: Always # Always: 函数定义与声明分开
-IncludeBlocks: Merge # Merge: 合并#include
-# AllowShortLambdasOnASingleLine: Empty    # 允许空的 lambda 在同一行
-# AllowEmptyBlocksOnASingleLine: true      # 允许空的代码块在同一行
+# 与仓库现有 C 代码风格保持一致；CI 会用 `clang-format --dry-run --Werror` 校验。
+Language: Cpp
+BasedOnStyle: Google
+IndentWidth: 4
+ColumnLimit: 110
+# 函数体的左大括号换行，控制语句的不换行——这是本仓库一直在用的写法。
+BreakBeforeBraces: Linux
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortBlocksOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AlignAfterOpenBracket: Align
+AlignTrailingComments: true
+BinPackArguments: true
+BinPackParameters: true
+IndentCaseLabels: false
+PointerAlignment: Right
+DerivePointerAlignment: false
+SeparateDefinitionBlocks: Always
+SortIncludes: false
+InsertNewlineAtEOF: true

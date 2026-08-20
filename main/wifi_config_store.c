@@ -1,180 +1,166 @@
 #include "wifi_config_store.h"
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
 
 #include "app_config.h"
 #include "cJSON.h"
-#include "esp_check.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "json_file.h"
 
 static const char *TAG = "wifi_store";
 
-static bool is_valid_entry(const wifi_credential_t *item)
+static wifi_credential_list_t s_cache;
+static SemaphoreHandle_t s_lock;
+
+static void lock(void)
 {
-    return item != NULL && item->ssid[0] != '\0';
+    if (s_lock != NULL) {
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+    }
 }
 
-static esp_err_t write_json_string(const char *json)
+static void unlock(void)
 {
-    FILE *file = fopen(KENKO_WIFI_CONFIG_FILE, "w");
-    if (file == NULL) {
-        return ESP_FAIL;
+    if (s_lock != NULL) {
+        xSemaphoreGive(s_lock);
     }
-
-    if (fputs(json, file) == EOF) {
-        fclose(file);
-        return ESP_FAIL;
-    }
-
-    fclose(file);
-    return ESP_OK;
 }
 
-esp_err_t wifi_config_store_load(wifi_credential_list_t *list)
+static esp_err_t persist_locked(void)
 {
-    struct stat st = {0};
-    FILE *file = NULL;
-    char *buffer = NULL;
-    cJSON *root = NULL;
-
-    if (list == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    memset(list, 0, sizeof(*list));
-
-    if (stat(KENKO_WIFI_CONFIG_FILE, &st) != 0 || st.st_size == 0) {
-        ESP_LOGI(TAG, "wifi config file missing or empty");
-        return ESP_OK;
-    }
-
-    file = fopen(KENKO_WIFI_CONFIG_FILE, "r");
-    if (file == NULL) {
-        return ESP_FAIL;
-    }
-
-    buffer = calloc(1, st.st_size + 1);
-    if (buffer == NULL) {
-        fclose(file);
-        return ESP_ERR_NO_MEM;
-    }
-
-    if (fread(buffer, 1, st.st_size, file) != (size_t)st.st_size) {
-        free(buffer);
-        fclose(file);
-        return ESP_FAIL;
-    }
-    fclose(file);
-
-    root = cJSON_Parse(buffer);
-    free(buffer);
-    if (!cJSON_IsArray(root)) {
-        cJSON_Delete(root);
-        ESP_LOGW(TAG, "wifi config is not a JSON array");
-        return ESP_OK;
-    }
-
-    size_t count = cJSON_GetArraySize(root);
-    for (size_t index = 0; index < count && list->count < WIFI_CONFIG_MAX_ITEMS; ++index) {
-        cJSON *entry = cJSON_GetArrayItem(root, (int)index);
-        cJSON *ssid = cJSON_GetObjectItemCaseSensitive(entry, "ssid");
-        cJSON *password = cJSON_GetObjectItemCaseSensitive(entry, "password");
-        if (!cJSON_IsString(ssid) || ssid->valuestring == NULL || ssid->valuestring[0] == '\0') {
-            continue;
-        }
-
-        wifi_credential_t *target = &list->items[list->count++];
-        strlcpy(target->ssid, ssid->valuestring, sizeof(target->ssid));
-        if (cJSON_IsString(password) && password->valuestring != NULL) {
-            strlcpy(target->password, password->valuestring, sizeof(target->password));
-        }
-    }
-
-    cJSON_Delete(root);
-    ESP_LOGI(TAG, "loaded %u wifi configs", (unsigned)list->count);
-    return ESP_OK;
-}
-
-esp_err_t wifi_config_store_save(const wifi_credential_list_t *list)
-{
-    if (list == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
     cJSON *root = cJSON_CreateArray();
     if (root == NULL) {
         return ESP_ERR_NO_MEM;
     }
 
-    for (size_t index = 0; index < list->count; ++index) {
-        const wifi_credential_t *item = &list->items[index];
-        if (!is_valid_entry(item)) {
-            continue;
-        }
-
+    for (size_t index = 0; index < s_cache.count; ++index) {
         cJSON *entry = cJSON_CreateObject();
         if (entry == NULL) {
             cJSON_Delete(root);
             return ESP_ERR_NO_MEM;
         }
-        cJSON_AddStringToObject(entry, "ssid", item->ssid);
-        cJSON_AddStringToObject(entry, "password", item->password);
+        cJSON_AddStringToObject(entry, "ssid", s_cache.items[index].ssid);
+        cJSON_AddStringToObject(entry, "password", s_cache.items[index].password);
         cJSON_AddItemToArray(root, entry);
     }
 
-    char *json = cJSON_PrintUnformatted(root);
+    esp_err_t err = json_file_write(KENKO_WIFI_CONFIG_FILE, root);
     cJSON_Delete(root);
-    if (json == NULL) {
-        return ESP_ERR_NO_MEM;
-    }
-
-    esp_err_t err = write_json_string(json);
-    cJSON_free(json);
     return err;
 }
 
-esp_err_t wifi_config_store_add(const char *ssid, const char *password)
+esp_err_t wifi_config_store_init(void)
 {
-    wifi_credential_list_t list = {0};
-    ESP_RETURN_ON_ERROR(wifi_config_store_load(&list), TAG, "load failed");
-    if (ssid == NULL || ssid[0] == '\0') {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (list.count >= WIFI_CONFIG_MAX_ITEMS) {
-        return ESP_ERR_NO_MEM;
+    if (s_lock == NULL) {
+        s_lock = xSemaphoreCreateMutex();
+        if (s_lock == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
     }
 
-    strlcpy(list.items[list.count].ssid, ssid, sizeof(list.items[list.count].ssid));
-    strlcpy(list.items[list.count].password, password == NULL ? "" : password, sizeof(list.items[list.count].password));
-    list.count++;
-    return wifi_config_store_save(&list);
+    lock();
+    memset(&s_cache, 0, sizeof(s_cache));
+
+    cJSON *root = NULL;
+    esp_err_t err = json_file_read(KENKO_WIFI_CONFIG_FILE, &root);
+    if (err == ESP_OK && cJSON_IsArray(root)) {
+        int count = cJSON_GetArraySize(root);
+        for (int index = 0; index < count && s_cache.count < WIFI_CONFIG_MAX_ITEMS; ++index) {
+            const cJSON *entry = cJSON_GetArrayItem(root, index);
+            const cJSON *ssid = cJSON_GetObjectItemCaseSensitive(entry, "ssid");
+            const cJSON *password = cJSON_GetObjectItemCaseSensitive(entry, "password");
+
+            if (!cJSON_IsString(ssid) || ssid->valuestring == NULL || ssid->valuestring[0] == '\0') {
+                continue;
+            }
+
+            wifi_credential_t *target = &s_cache.items[s_cache.count++];
+            strlcpy(target->ssid, ssid->valuestring, sizeof(target->ssid));
+            if (cJSON_IsString(password) && password->valuestring != NULL) {
+                strlcpy(target->password, password->valuestring, sizeof(target->password));
+            }
+        }
+    } else if (err != ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "wifi config unreadable (%s), starting empty", esp_err_to_name(err));
+    }
+    cJSON_Delete(root);
+
+    size_t count = s_cache.count;
+    unlock();
+
+    ESP_LOGI(TAG, "loaded %u wifi configs", (unsigned)count);
+    return ESP_OK;
 }
 
-esp_err_t wifi_config_store_remove(size_t index)
+void wifi_config_store_load(wifi_credential_list_t *list)
 {
-    wifi_credential_list_t list = {0};
-    ESP_RETURN_ON_ERROR(wifi_config_store_load(&list), TAG, "load failed");
-    if (index >= list.count) {
+    if (list == NULL) {
+        return;
+    }
+
+    lock();
+    *list = s_cache;
+    unlock();
+}
+
+esp_err_t wifi_config_store_save(const wifi_credential_list_t *list)
+{
+    if (list == NULL || list->count > WIFI_CONFIG_MAX_ITEMS) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    for (size_t cursor = index; cursor + 1 < list.count; ++cursor) {
-        list.items[cursor] = list.items[cursor + 1];
+    lock();
+    memset(&s_cache, 0, sizeof(s_cache));
+    for (size_t index = 0; index < list->count; ++index) {
+        if (list->items[index].ssid[0] == '\0') {
+            continue;
+        }
+        s_cache.items[s_cache.count++] = list->items[index];
     }
-    list.count--;
-    return wifi_config_store_save(&list);
+    esp_err_t err = persist_locked();
+    size_t count = s_cache.count;
+    unlock();
+
+    ESP_LOGI(TAG, "saved %u wifi configs (%s)", (unsigned)count, esp_err_to_name(err));
+    return err;
 }
 
 bool wifi_config_store_has_entries(void)
 {
-    wifi_credential_list_t list = {0};
-    return wifi_config_store_load(&list) == ESP_OK && list.count > 0;
+    lock();
+    bool has_entries = s_cache.count > 0;
+    unlock();
+    return has_entries;
 }
 
 esp_err_t wifi_config_store_clear(void)
 {
-    return write_json_string("[]");
+    lock();
+    memset(&s_cache, 0, sizeof(s_cache));
+    esp_err_t err = persist_locked();
+    unlock();
+
+    ESP_LOGW(TAG, "wifi configs cleared");
+    return err;
+}
+
+bool wifi_config_store_find_password(const char *ssid, char *out, size_t out_size)
+{
+    if (ssid == NULL || out == NULL || out_size == 0) {
+        return false;
+    }
+
+    bool found = false;
+    lock();
+    for (size_t index = 0; index < s_cache.count; ++index) {
+        if (strcmp(s_cache.items[index].ssid, ssid) == 0) {
+            strlcpy(out, s_cache.items[index].password, out_size);
+            found = true;
+            break;
+        }
+    }
+    unlock();
+    return found;
 }

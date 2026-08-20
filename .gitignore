@@ -1,9 +1,16 @@
+# ESP-IDF 构建产物
 build/
-.vscode/
+build-host/
+managed_components/
 
-AGENTS.md
-
+# sdkconfig 是由 sdkconfig.defaults 生成的产物，真源是 sdkconfig.defaults
+sdkconfig
 sdkconfig.old
-managed_components
+sdkconfig.ci
 
+# 编辑器
+.vscode/
+.idea/
+
+# 系统
 .DS_Store

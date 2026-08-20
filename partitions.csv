@@ -1,12 +1,10 @@
-# Name,     Type, SubType,  Offset, Size,   Flags
-nvs,        data, nvs,      0x9000,  96K,
-otadata,    data, ota,      ,        8K,
-phy_init,   data, phy,      ,        4K,
-coredump,   data, coredump, ,        256K,
-
-factory,    app,  factory,  ,        2M,
-ota_0,      app,  ota_0,    ,        2M,
-ota_1,      app,  ota_1,    ,        2M,
-
-web,        data, littlefs, ,        4M
-storage,    data, littlefs, ,        5M
+# 16MB flash / 双 OTA 布局。偏移全部写死，避免改动某个分区大小时后面的分区悄悄挪位。
+# Name,     Type, SubType,  Offset,    Size,      Flags
+nvs,        data, nvs,      0x9000,    0x6000,
+otadata,    data, ota,      0xF000,    0x2000,
+phy_init,   data, phy,      0x11000,   0x1000,
+coredump,   data, coredump, 0x12000,   0x10000,
+ota_0,      app,  ota_0,    0x30000,   0x300000,
+ota_1,      app,  ota_1,    0x330000,  0x300000,
+web,        data, littlefs, 0x630000,  0x400000,
+storage,    data, littlefs, 0xA30000,  0x5D0000,

@@ -2,48 +2,66 @@
 
 #include "app_config.h"
 #include "app_state.h"
-#include "esp_check.h"
 #include "driver/gpio.h"
+#include "esp_check.h"
 #include "esp_log.h"
-#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "wifi_config_store.h"
 
 static const char *TAG = "button";
+
+/* 连续读到相同电平的次数达到阈值才认为电平稳定。 */
+#define BUTTON_DEBOUNCE_SAMPLES 3
 
 static void button_task(void *arg)
 {
     (void)arg;
-    TickType_t pressed_at = 0;
-    bool sent_provisioning = false;
+
+    bool stable_pressed = false;
+    bool last_sample = false;
+    int same_sample_count = 0;
+    uint32_t pressed_ms = 0;
+    bool provisioning_sent = false;
+    bool factory_reset_sent = false;
 
     for (;;) {
-        bool pressed = gpio_get_level(KENKO_BUTTON_GPIO) == 0;
-        if (pressed) {
-            if (pressed_at == 0) {
-                pressed_at = xTaskGetTickCount();
-                sent_provisioning = false;
-            }
+        bool sample = gpio_get_level(KENKO_BUTTON_GPIO) == 0;
 
-            uint32_t elapsed_ms = (uint32_t)((xTaskGetTickCount() - pressed_at) * portTICK_PERIOD_MS);
-            if (!sent_provisioning && elapsed_ms >= 5000 && elapsed_ms < 10000) {
-                ESP_LOGW(TAG, "boot button long press: enter provisioning mode");
-                app_state_post_event(APP_EVENT_ENTER_PROVISIONING);
-                sent_provisioning = true;
-            }
-
-            if (elapsed_ms >= 10000) {
-                ESP_LOGW(TAG, "boot button very long press: clear wifi config and reboot");
-                wifi_config_store_clear();
-                esp_restart();
+        if (sample == last_sample) {
+            if (same_sample_count < BUTTON_DEBOUNCE_SAMPLES) {
+                same_sample_count++;
             }
         } else {
-            pressed_at = 0;
-            sent_provisioning = false;
+            same_sample_count = 1;
+            last_sample = sample;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(100));
+        if (same_sample_count >= BUTTON_DEBOUNCE_SAMPLES && stable_pressed != sample) {
+            stable_pressed = sample;
+            pressed_ms = 0;
+            provisioning_sent = false;
+            factory_reset_sent = false;
+            ESP_LOGD(TAG, "button %s", stable_pressed ? "pressed" : "released");
+        }
+
+        if (stable_pressed) {
+            pressed_ms += KENKO_BUTTON_POLL_INTERVAL_MS;
+
+            if (!provisioning_sent && pressed_ms >= KENKO_BUTTON_PROVISIONING_MS) {
+                ESP_LOGW(TAG, "long press %u ms: entering provisioning mode",
+                         (unsigned)KENKO_BUTTON_PROVISIONING_MS);
+                app_state_post_event(APP_EVENT_ENTER_PROVISIONING);
+                provisioning_sent = true;
+            }
+
+            if (!factory_reset_sent && pressed_ms >= KENKO_BUTTON_FACTORY_RESET_MS) {
+                ESP_LOGW(TAG, "long press %u ms: factory reset", (unsigned)KENKO_BUTTON_FACTORY_RESET_MS);
+                app_state_post_event(APP_EVENT_FACTORY_RESET);
+                factory_reset_sent = true;
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(KENKO_BUTTON_POLL_INTERVAL_MS));
     }
 }
 
@@ -57,6 +75,9 @@ esp_err_t button_monitor_start(void)
         .intr_type = GPIO_INTR_DISABLE,
     };
     ESP_RETURN_ON_ERROR(gpio_config(&config), TAG, "button gpio config failed");
-    xTaskCreate(button_task, "button_monitor", 4096, NULL, 5, NULL);
+
+    BaseType_t created = xTaskCreate(button_task, "button_monitor", KENKO_TASK_STACK_BUTTON, NULL,
+                                     KENKO_TASK_PRIORITY_BUTTON, NULL);
+    ESP_RETURN_ON_FALSE(created == pdPASS, ESP_ERR_NO_MEM, TAG, "button task create failed");
     return ESP_OK;
 }

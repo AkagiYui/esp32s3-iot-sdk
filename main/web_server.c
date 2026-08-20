@@ -1,147 +1,137 @@
 #include "web_server.h"
 
-#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 
+#include "api_handlers.h"
 #include "app_config.h"
-#include "device_info.h"
+#include "app_state.h"
 #include "esp_check.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
-#include "esp_wifi.h"
-#include "wifi_config_store.h"
-
-#include "cJSON.h"
+#include "http_utils.h"
+#include "storage_fs.h"
 
 static const char *TAG = "web_server";
+
+#define WEB_FILE_CHUNK_BYTES 1024
+#define WEB_PATH_MAX 192
+#define WEB_FS_PATH_MAX (WEB_PATH_MAX + sizeof(KENKO_WEB_BASE_PATH) + 8)
+
 static httpd_handle_t s_server;
 
-static const char *content_type_from_path(const char *path);
+/* 前端分区不可用时的兜底页面，保证设备至少能告诉用户发生了什么。 */
+static const char k_fallback_page[] =
+    "<!doctype html><html lang=\"zh\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+    "<title>Web 资源未安装</title></head><body style=\"font-family:system-ui;padding:2rem;line-height:1.6\">"
+    "<h1>Web 资源未安装</h1>"
+    "<p>设备固件正常运行，但 <code>web</code> 分区没有挂载或没有内容。</p>"
+    "<p>请烧录 <code>web.bin</code>，或直接烧录合并镜像后重试。</p>"
+    "<p>设备接口仍然可用，例如 <a href=\"/api/system/info\">/api/system/info</a>。</p>"
+    "</body></html>";
 
-typedef struct {
-    char ssid[33];
-    int rssi;
-    wifi_auth_mode_t authmode;
-} wifi_scan_result_t;
-
-static esp_err_t send_json_response(httpd_req_t *req, int status_code, const char *payload);
-static esp_err_t wifi_config_get_handler(httpd_req_t *req);
-static esp_err_t wifi_config_put_handler(httpd_req_t *req);
-static esp_err_t wifi_scan_get_handler(httpd_req_t *req);
-static esp_err_t parse_request_body(httpd_req_t *req, char *buffer, size_t buffer_size);
-static const char *authmode_to_string(wifi_auth_mode_t authmode);
-static int compare_scan_result(const void *left, const void *right);
-
-static esp_err_t send_common_headers(httpd_req_t *req, const char *path, const char *encoding)
+/** 各系统的联网探测地址，命中后要么引导到配网页，要么明确告知"网络通畅"。 */
+static bool is_captive_probe(const char *path)
 {
-    httpd_resp_set_type(req, content_type_from_path(path));
-    if (encoding != NULL) {
-        httpd_resp_set_hdr(req, "Content-Encoding", encoding);
-        httpd_resp_set_hdr(req, "Vary", "Accept-Encoding");
-    }
-    return ESP_OK;
-}
+    static const char *probes[] = {
+        "/generate_204",
+        "/gen_204",
+        "/hotspot-detect.html",
+        "/library/test/success.html",
+        "/connecttest.txt",
+        "/ncsi.txt",
+        "/redirect",
+        "/success.txt",
+        "/canonical.html",
+    };
 
-static esp_err_t send_json_response(httpd_req_t *req, int status_code, const char *payload)
-{
-    char status[32] = {0};
-    snprintf(status, sizeof(status), "%d %s", status_code,
-             status_code == 200   ? "OK"
-             : status_code == 400 ? "Bad Request"
-             : status_code == 500 ? "Internal Server Error"
-                                  : "OK");
-    httpd_resp_set_status(req, status);
-    httpd_resp_set_type(req, "application/json");
-    if (req->method == HTTP_HEAD) {
-        return httpd_resp_send(req, NULL, 0);
-    }
-    return httpd_resp_sendstr(req, payload);
-}
-
-static const char *strip_encoding_suffix(const char *path)
-{
-    static const char *suffixes[] = { ".br", ".gz", ".zst" };
-
-    for (size_t index = 0; index < sizeof(suffixes) / sizeof(suffixes[0]); ++index) {
-        const char *suffix = suffixes[index];
-        size_t path_len = strlen(path);
-        size_t suffix_len = strlen(suffix);
-        if (path_len > suffix_len && strcmp(path + path_len - suffix_len, suffix) == 0) {
-            return suffix;
+    for (size_t index = 0; index < sizeof(probes) / sizeof(probes[0]); ++index) {
+        if (strcmp(path, probes[index]) == 0) {
+            return true;
         }
     }
-
-    return NULL;
+    return false;
 }
 
-static esp_err_t captive_redirect_handler(httpd_req_t *req)
+static esp_err_t handle_captive_probe(httpd_req_t *req)
 {
-    httpd_resp_set_status(req, "302 Found");
-    httpd_resp_set_hdr(req, "Location", "http://192.168.6.1/");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache, must-revalidate");
+    if (app_state_is_provisioning()) {
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", KENKO_AP_URL);
+        httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+        return httpd_resp_send(req, NULL, 0);
+    }
+
+    /* 已经联网时如实回答探测，否则系统会一直提示"需要登录"。 */
+    httpd_resp_set_status(req, "204 No Content");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_send(req, NULL, 0);
 }
 
-static const char *content_type_from_path(const char *path)
-{
-    char normalized_path[256] = {0};
-    strlcpy(normalized_path, path, sizeof(normalized_path));
-
-    const char *encoding_suffix = strip_encoding_suffix(normalized_path);
-    if (encoding_suffix != NULL) {
-        normalized_path[strlen(normalized_path) - strlen(encoding_suffix)] = '\0';
-    }
-
-    const char *ext = strrchr(normalized_path, '.');
-    if (ext == NULL) {
-        return "text/plain";
-    }
-    if (strcmp(ext, ".html") == 0) {
-        return "text/html; charset=utf-8";
-    }
-    if (strcmp(ext, ".js") == 0) {
-        return "application/javascript";
-    }
-    if (strcmp(ext, ".css") == 0) {
-        return "text/css";
-    }
-    if (strcmp(ext, ".svg") == 0) {
-        return "image/svg+xml";
-    }
-    if (strcmp(ext, ".json") == 0) {
-        return "application/json";
-    }
-    return "application/octet-stream";
-}
-
-static bool file_exists(const char *path)
+static bool file_exists(const char *path, struct stat *out)
 {
     struct stat st = {0};
-    return stat(path, &st) == 0 && S_ISREG(st.st_mode);
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return false;
+    }
+    if (out != NULL) {
+        *out = st;
+    }
+    return true;
 }
 
-static esp_err_t send_file(httpd_req_t *req, const char *path, const char *encoding)
+static void build_etag(const struct stat *st, char *out, size_t out_size)
 {
-    ESP_RETURN_ON_ERROR(send_common_headers(req, path, encoding), TAG, "set headers failed");
+    snprintf(out, out_size, "\"%lx-%lx\"", (unsigned long)st->st_size, (unsigned long)st->st_mtime);
+}
+
+static bool etag_matches(httpd_req_t *req, const char *etag)
+{
+    char header[64] = {0};
+    if (httpd_req_get_hdr_value_str(req, "If-None-Match", header, sizeof(header)) != ESP_OK) {
+        return false;
+    }
+    return strstr(header, etag) != NULL;
+}
+
+static esp_err_t send_file(httpd_req_t *req, const char *fs_path, const char *encoding, const struct stat *st,
+                           const char *logical_path)
+{
+    char etag[48];
+    build_etag(st, etag, sizeof(etag));
+
+    httpd_resp_set_type(req, http_utils_content_type(logical_path));
+    httpd_resp_set_hdr(req, "Cache-Control", http_utils_cache_control(logical_path));
+    httpd_resp_set_hdr(req, "ETag", etag);
+    httpd_resp_set_hdr(req, "Vary", "Accept-Encoding");
+    if (encoding != NULL) {
+        httpd_resp_set_hdr(req, "Content-Encoding", encoding);
+    }
+
+    if (etag_matches(req, etag)) {
+        httpd_resp_set_status(req, "304 Not Modified");
+        return httpd_resp_send(req, NULL, 0);
+    }
+
     if (req->method == HTTP_HEAD) {
         return httpd_resp_send(req, NULL, 0);
     }
 
-    FILE *file = fopen(path, "rb");
+    FILE *file = fopen(fs_path, "rb");
     if (file == NULL) {
-        return ESP_FAIL;
+        ESP_LOGE(TAG, "open %s failed", fs_path);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "cannot open asset");
     }
 
-    char buffer[1024];
-    size_t read_bytes = 0;
+    char buffer[WEB_FILE_CHUNK_BYTES];
+    size_t read_bytes;
     while ((read_bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-        esp_err_t err = httpd_resp_send_chunk(req, buffer, read_bytes);
-        if (err != ESP_OK) {
+        if (httpd_resp_send_chunk(req, buffer, read_bytes) != ESP_OK) {
             fclose(file);
-            httpd_resp_sendstr_chunk(req, NULL);
-            return err;
+            /* 客户端提前断开时不再尝试补发终止块。 */
+            return ESP_FAIL;
         }
     }
 
@@ -149,332 +139,100 @@ static esp_err_t send_file(httpd_req_t *req, const char *path, const char *encod
     return httpd_resp_send_chunk(req, NULL, 0);
 }
 
-static esp_err_t device_info_get_handler(httpd_req_t *req)
+/**
+ * 按 `Accept-Encoding` 找出最合适的一份资源。
+ * 找到预压缩版本就返回它，否则回落到原始文件。
+ */
+static bool resolve_asset(httpd_req_t *req, const char *logical_path, char *fs_path, size_t fs_path_size,
+                          const char **encoding, struct stat *st)
 {
-    device_info_t info = {0};
-    device_info_snapshot(&info);
-
-    char payload[512];
-    int length = snprintf(payload, sizeof(payload),
-                          "{\"device_name\":\"%s\",\"mdns_hostname\":\"%s.local\",\"firmware_version\":%u,\"firmware_name\":\"%s\",\"free_heap\":%u,\"min_free_heap\":%u,\"wifi_connected\":%s,\"provisioning_mode\":%s,\"ip_address\":\"%s\"}",
-                          info.device_name,
-                          info.mdns_hostname,
-                          (unsigned)info.firmware_version,
-                          info.firmware_name,
-                          (unsigned)info.free_heap,
-                          (unsigned)info.min_free_heap,
-                          info.wifi_connected ? "true" : "false",
-                          info.provisioning_mode ? "true" : "false",
-                          info.ip_address);
-
-    if (length <= 0 || length >= (int)sizeof(payload)) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "payload too large");
+    char base_path[WEB_FS_PATH_MAX];
+    int written = snprintf(base_path, sizeof(base_path), "%s%s", KENKO_WEB_BASE_PATH, logical_path);
+    if (written <= 0 || written >= (int)sizeof(base_path)) {
+        return false;
     }
-
-    httpd_resp_set_type(req, "application/json");
-    if (req->method == HTTP_HEAD) {
-        return httpd_resp_send(req, NULL, 0);
-    }
-    return httpd_resp_send(req, payload, length);
-}
-
-static esp_err_t wifi_config_get_handler(httpd_req_t *req)
-{
-    wifi_credential_list_t list = {0};
-    ESP_RETURN_ON_ERROR(wifi_config_store_load(&list), TAG, "load wifi config failed");
-
-    cJSON *root = cJSON_CreateArray();
-    if (root == NULL) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
-    }
-
-    for (size_t index = 0; index < list.count; ++index) {
-        cJSON *entry = cJSON_CreateObject();
-        if (entry == NULL) {
-            cJSON_Delete(root);
-            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
-        }
-
-        cJSON_AddStringToObject(entry, "ssid", list.items[index].ssid);
-        cJSON_AddStringToObject(entry, "password", list.items[index].password);
-        cJSON_AddNumberToObject(entry, "priority", (double)index);
-        cJSON_AddItemToArray(root, entry);
-    }
-
-    char *payload = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-    if (payload == NULL) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "json encode failed");
-    }
-
-    esp_err_t err = send_json_response(req, 200, payload);
-    cJSON_free(payload);
-    return err;
-}
-
-static esp_err_t parse_request_body(httpd_req_t *req, char *buffer, size_t buffer_size)
-{
-    if (req->content_len <= 0 || (size_t)req->content_len >= buffer_size) {
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    int received = 0;
-    while (received < req->content_len) {
-        int ret = httpd_req_recv(req, buffer + received, req->content_len - received);
-        if (ret <= 0) {
-            return ESP_FAIL;
-        }
-        received += ret;
-    }
-
-    buffer[received] = '\0';
-    return ESP_OK;
-}
-
-static esp_err_t wifi_config_put_handler(httpd_req_t *req)
-{
-    char body[2048] = {0};
-    if (parse_request_body(req, body, sizeof(body)) != ESP_OK) {
-        return send_json_response(req, 400, "{\"message\":\"invalid request body\"}");
-    }
-
-    cJSON *root = cJSON_Parse(body);
-    if (!cJSON_IsArray(root)) {
-        cJSON_Delete(root);
-        return send_json_response(req, 400, "{\"message\":\"body must be a json array\"}");
-    }
-
-    wifi_credential_list_t list = {0};
-    size_t count = cJSON_GetArraySize(root);
-    if (count > WIFI_CONFIG_MAX_ITEMS) {
-        cJSON_Delete(root);
-        return send_json_response(req, 400, "{\"message\":\"too many wifi configs\"}");
-    }
-
-    for (size_t index = 0; index < count; ++index) {
-        cJSON *entry = cJSON_GetArrayItem(root, (int)index);
-        cJSON *ssid = cJSON_GetObjectItemCaseSensitive(entry, "ssid");
-        cJSON *password = cJSON_GetObjectItemCaseSensitive(entry, "password");
-
-        if (!cJSON_IsString(ssid) || ssid->valuestring == NULL || ssid->valuestring[0] == '\0') {
-            cJSON_Delete(root);
-            return send_json_response(req, 400, "{\"message\":\"ssid is required\"}");
-        }
-
-        if (strlen(ssid->valuestring) >= WIFI_CONFIG_SSID_MAX_LEN) {
-            cJSON_Delete(root);
-            return send_json_response(req, 400, "{\"message\":\"ssid too long\"}");
-        }
-
-        if (cJSON_IsString(password) && password->valuestring != NULL &&
-            strlen(password->valuestring) >= WIFI_CONFIG_PASSWORD_MAX_LEN) {
-            cJSON_Delete(root);
-            return send_json_response(req, 400, "{\"message\":\"password too long\"}");
-        }
-
-        strlcpy(list.items[list.count].ssid, ssid->valuestring, sizeof(list.items[list.count].ssid));
-        strlcpy(list.items[list.count].password,
-                cJSON_IsString(password) && password->valuestring != NULL ? password->valuestring : "",
-                sizeof(list.items[list.count].password));
-        list.count++;
-    }
-
-    cJSON_Delete(root);
-    ESP_RETURN_ON_ERROR(wifi_config_store_save(&list), TAG, "save wifi config failed");
-    return send_json_response(req, 200, "{\"message\":\"ok\"}");
-}
-
-static const char *authmode_to_string(wifi_auth_mode_t authmode)
-{
-    switch (authmode) {
-        case WIFI_AUTH_OPEN:
-            return "OPEN";
-        case WIFI_AUTH_WEP:
-            return "WEP";
-        case WIFI_AUTH_WPA_PSK:
-            return "WPA-PSK";
-        case WIFI_AUTH_WPA2_PSK:
-            return "WPA2-PSK";
-        case WIFI_AUTH_WPA_WPA2_PSK:
-            return "WPA/WPA2-PSK";
-        case WIFI_AUTH_WPA2_ENTERPRISE:
-            return "WPA2-ENT";
-        case WIFI_AUTH_WPA3_PSK:
-            return "WPA3-PSK";
-        case WIFI_AUTH_WPA2_WPA3_PSK:
-            return "WPA2/WPA3-PSK";
-        default:
-            return "UNKNOWN";
-    }
-}
-
-static int compare_scan_result(const void *left, const void *right)
-{
-    const wifi_scan_result_t *a = (const wifi_scan_result_t *)left;
-    const wifi_scan_result_t *b = (const wifi_scan_result_t *)right;
-    return b->rssi - a->rssi;
-}
-
-static esp_err_t wifi_scan_get_handler(httpd_req_t *req)
-{
-    wifi_scan_config_t scan_config = {
-        .ssid = NULL,
-        .bssid = NULL,
-        .channel = 0,
-        .show_hidden = true,
-    };
-
-    esp_err_t err = esp_wifi_scan_start(&scan_config, true);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "wifi scan failed: %s", esp_err_to_name(err));
-        return send_json_response(req, 500, "{\"message\":\"wifi scan failed\"}");
-    }
-
-    uint16_t ap_count = 0;
-    ESP_RETURN_ON_ERROR(esp_wifi_scan_get_ap_num(&ap_count), TAG, "get ap count failed");
-    if (ap_count == 0) {
-        return send_json_response(req, 200, "[]");
-    }
-
-    wifi_ap_record_t ap_records[32] = {0};
-    if (ap_count > 32) {
-        ap_count = 32;
-    }
-    uint16_t record_count = ap_count;
-    ESP_RETURN_ON_ERROR(esp_wifi_scan_get_ap_records(&record_count, ap_records), TAG, "get ap records failed");
-
-    wifi_scan_result_t results[32] = {0};
-    size_t result_count = 0;
-    for (uint16_t index = 0; index < record_count; ++index) {
-        if (ap_records[index].ssid[0] == '\0') {
-            continue;
-        }
-
-        bool exists = false;
-        for (size_t existing = 0; existing < result_count; ++existing) {
-            if (strcmp(results[existing].ssid, (const char *)ap_records[index].ssid) == 0) {
-                if (ap_records[index].rssi > results[existing].rssi) {
-                    results[existing].rssi = ap_records[index].rssi;
-                    results[existing].authmode = ap_records[index].authmode;
-                }
-                exists = true;
-                break;
-            }
-        }
-        if (exists) {
-            continue;
-        }
-
-        strlcpy(results[result_count].ssid, (const char *)ap_records[index].ssid, sizeof(results[result_count].ssid));
-        results[result_count].rssi = ap_records[index].rssi;
-        results[result_count].authmode = ap_records[index].authmode;
-        result_count++;
-    }
-
-    qsort(results, result_count, sizeof(results[0]), compare_scan_result);
-
-    cJSON *root = cJSON_CreateArray();
-    if (root == NULL) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
-    }
-
-    for (size_t index = 0; index < result_count; ++index) {
-        cJSON *entry = cJSON_CreateObject();
-        if (entry == NULL) {
-            cJSON_Delete(root);
-            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
-        }
-        cJSON_AddStringToObject(entry, "ssid", results[index].ssid);
-        cJSON_AddNumberToObject(entry, "rssi", results[index].rssi);
-        cJSON_AddStringToObject(entry, "authmode", authmode_to_string(results[index].authmode));
-        cJSON_AddItemToArray(root, entry);
-    }
-
-    char *payload = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-    if (payload == NULL) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "json encode failed");
-    }
-
-    err = send_json_response(req, 200, payload);
-    cJSON_free(payload);
-    return err;
-}
-
-static esp_err_t static_get_handler(httpd_req_t *req)
-{
-    char request_path[128] = {0};
-    const char *uri = req->uri;
-    if (strcmp(uri, "/") == 0) {
-        uri = "/index.html";
-    }
-
-    strlcpy(request_path, uri, sizeof(request_path));
-    char *query = strchr(request_path, '?');
-    if (query != NULL) {
-        *query = '\0';
-    }
-
-    char filesystem_path[256] = {0};
-    snprintf(filesystem_path, sizeof(filesystem_path), "%s%s", KENKO_WEB_BASE_PATH, request_path);
 
     char accept_encoding[128] = {0};
     httpd_req_get_hdr_value_str(req, "Accept-Encoding", accept_encoding, sizeof(accept_encoding));
 
-    if (accept_encoding[0] != '\0') {
-        const char *cursor = accept_encoding;
-        while (*cursor != '\0') {
-            while (*cursor == ' ' || *cursor == ',') {
-                ++cursor;
-            }
-            if (*cursor == '\0') {
-                break;
-            }
+    http_encoding_t candidates[HTTP_UTILS_MAX_ENCODINGS];
+    size_t candidate_count =
+        http_utils_parse_accept_encoding(accept_encoding, candidates, HTTP_UTILS_MAX_ENCODINGS);
 
-            char token[16] = {0};
-            size_t token_len = 0;
-            while (*cursor != '\0' && *cursor != ',' && *cursor != ';' && token_len + 1 < sizeof(token)) {
-                token[token_len++] = (char)tolower((unsigned char)*cursor++);
-            }
-            token[token_len] = '\0';
-
-            const char *suffix = NULL;
-            const char *encoding = NULL;
-            if (strcmp(token, "br") == 0) {
-                suffix = ".br";
-                encoding = "br";
-            } else if (strcmp(token, "gzip") == 0) {
-                suffix = ".gz";
-                encoding = "gzip";
-            } else if (strcmp(token, "zstd") == 0) {
-                suffix = ".zst";
-                encoding = "zstd";
-            }
-
-            if (suffix != NULL) {
-                char encoded_path[272] = {0};
-                snprintf(encoded_path, sizeof(encoded_path), "%s%s", filesystem_path, suffix);
-                if (file_exists(encoded_path)) {
-                    ESP_LOGI(TAG, "serving encoded asset %s (%s)", encoded_path, encoding);
-                    return send_file(req, encoded_path, encoding);
-                }
-            }
-
-            while (*cursor != '\0' && *cursor != ',') {
-                ++cursor;
-            }
+    for (size_t index = 0; index < candidate_count; ++index) {
+        char encoded_path[WEB_FS_PATH_MAX];
+        written = snprintf(encoded_path, sizeof(encoded_path), "%s%s", base_path, candidates[index].suffix);
+        if (written <= 0 || written >= (int)sizeof(encoded_path)) {
+            continue;
+        }
+        if (file_exists(encoded_path, st)) {
+            strlcpy(fs_path, encoded_path, fs_path_size);
+            *encoding = candidates[index].token;
+            return true;
         }
     }
 
-    if (!file_exists(filesystem_path)) {
-        snprintf(filesystem_path, sizeof(filesystem_path), "%s/index.html", KENKO_WEB_BASE_PATH);
+    if (file_exists(base_path, st)) {
+        strlcpy(fs_path, base_path, fs_path_size);
+        *encoding = NULL;
+        return true;
     }
 
-    if (!file_exists(filesystem_path)) {
-        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+    return false;
+}
+
+static esp_err_t send_fallback_page(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    if (req->method == HTTP_HEAD) {
+        return httpd_resp_send(req, NULL, 0);
+    }
+    return httpd_resp_send(req, k_fallback_page, HTTPD_RESP_USE_STRLEN);
+}
+
+static esp_err_t static_handler(httpd_req_t *req)
+{
+    if (req->method != HTTP_GET && req->method != HTTP_HEAD) {
+        httpd_resp_set_hdr(req, "Allow", "GET, HEAD");
+        return httpd_resp_send_err(req, HTTPD_405_METHOD_NOT_ALLOWED, "unsupported method");
     }
 
-    return send_file(req, filesystem_path, NULL);
+    char path[WEB_PATH_MAX];
+    if (!http_utils_sanitize_path(req->uri, path, sizeof(path))) {
+        ESP_LOGW(TAG, "rejected uri: %s", req->uri);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid path");
+    }
+
+    if (is_captive_probe(path)) {
+        return handle_captive_probe(req);
+    }
+
+    if (!storage_fs_web_available()) {
+        return send_fallback_page(req);
+    }
+
+    if (strcmp(path, "/") == 0) {
+        strlcpy(path, "/index.html", sizeof(path));
+    }
+
+    char fs_path[WEB_FS_PATH_MAX];
+    const char *encoding = NULL;
+    struct stat st = {0};
+
+    if (resolve_asset(req, path, fs_path, sizeof(fs_path), &encoding, &st)) {
+        return send_file(req, fs_path, encoding, &st, path);
+    }
+
+    /*
+     * 单页应用回落：任何未知路径都交给入口文档，并且同样走一遍编码协商，
+     * 否则回落路径会白白发送未压缩的整包。
+     */
+    if (resolve_asset(req, "/index.html", fs_path, sizeof(fs_path), &encoding, &st)) {
+        return send_file(req, fs_path, encoding, &st, "/index.html");
+    }
+
+    return send_fallback_page(req);
 }
 
 esp_err_t web_server_start(void)
@@ -486,141 +244,47 @@ esp_err_t web_server_start(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = KENKO_HTTP_PORT;
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.stack_size = 8192;
+    config.stack_size = KENKO_TASK_STACK_HTTPD;
     config.max_open_sockets = 7;
     config.max_uri_handlers = 20;
     config.lru_purge_enable = true;
+    config.recv_wait_timeout = 10;
+    config.send_wait_timeout = 10;
 
     ESP_RETURN_ON_ERROR(httpd_start(&s_server, &config), TAG, "start web server failed");
 
-    const httpd_uri_t api_uri = {
-        .uri = "/api/device-info",
-        .method = HTTP_GET,
-        .handler = device_info_get_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t api_uri_head = {
-        .uri = "/api/device-info",
-        .method = HTTP_HEAD,
-        .handler = device_info_get_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t wifi_config_get_uri = {
-        .uri = "/api/wifi-config",
-        .method = HTTP_GET,
-        .handler = wifi_config_get_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t wifi_config_head_uri = {
-        .uri = "/api/wifi-config",
-        .method = HTTP_HEAD,
-        .handler = wifi_config_get_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t wifi_config_put_uri = {
-        .uri = "/api/wifi-config",
-        .method = HTTP_PUT,
-        .handler = wifi_config_put_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t wifi_scan_uri = {
-        .uri = "/api/wifi-scan",
-        .method = HTTP_GET,
-        .handler = wifi_scan_get_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t wifi_scan_head_uri = {
-        .uri = "/api/wifi-scan",
-        .method = HTTP_HEAD,
-        .handler = wifi_scan_get_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t captive_generate_204 = {
-        .uri = "/generate_204",
-        .method = HTTP_GET,
-        .handler = captive_redirect_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t captive_generate_204_head = {
-        .uri = "/generate_204",
-        .method = HTTP_HEAD,
-        .handler = captive_redirect_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t captive_hotspot_detect = {
-        .uri = "/hotspot-detect.html",
-        .method = HTTP_GET,
-        .handler = captive_redirect_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t captive_hotspot_detect_head = {
-        .uri = "/hotspot-detect.html",
-        .method = HTTP_HEAD,
-        .handler = captive_redirect_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t captive_connecttest = {
-        .uri = "/connecttest.txt",
-        .method = HTTP_GET,
-        .handler = captive_redirect_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t captive_connecttest_head = {
-        .uri = "/connecttest.txt",
-        .method = HTTP_HEAD,
-        .handler = captive_redirect_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t captive_ncsi = {
-        .uri = "/ncsi.txt",
-        .method = HTTP_GET,
-        .handler = captive_redirect_handler,
-        .user_ctx = NULL,
-    };
-    const httpd_uri_t captive_ncsi_head = {
-        .uri = "/ncsi.txt",
-        .method = HTTP_HEAD,
-        .handler = captive_redirect_handler,
-        .user_ctx = NULL,
-    };
+    esp_err_t err = api_handlers_register(s_server);
+    if (err != ESP_OK) {
+        httpd_stop(s_server);
+        s_server = NULL;
+        return err;
+    }
+
+    /* 通配的静态资源处理器必须最后注册，否则会抢在接口路由前面。 */
     const httpd_uri_t static_uri = {
         .uri = "/*",
-        .method = HTTP_GET,
-        .handler = static_get_handler,
+        .method = HTTP_ANY,
+        .handler = static_handler,
         .user_ctx = NULL,
     };
-    const httpd_uri_t static_uri_head = {
-        .uri = "/*",
-        .method = HTTP_HEAD,
-        .handler = static_get_handler,
-        .user_ctx = NULL,
-    };
+    err = httpd_register_uri_handler(s_server, &static_uri);
+    if (err != ESP_OK) {
+        httpd_stop(s_server);
+        s_server = NULL;
+        return err;
+    }
 
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &api_uri), TAG, "register /api/device-info GET failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &api_uri_head), TAG, "register /api/device-info HEAD failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &wifi_config_get_uri), TAG, "register /api/wifi-config GET failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &wifi_config_head_uri), TAG, "register /api/wifi-config HEAD failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &wifi_config_put_uri), TAG, "register /api/wifi-config PUT failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &wifi_scan_uri), TAG, "register /api/wifi-scan GET failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &wifi_scan_head_uri), TAG, "register /api/wifi-scan HEAD failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_generate_204), TAG, "register /generate_204 GET failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_generate_204_head), TAG, "register /generate_204 HEAD failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_hotspot_detect), TAG, "register /hotspot-detect.html GET failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_hotspot_detect_head), TAG, "register /hotspot-detect.html HEAD failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_connecttest), TAG, "register /connecttest.txt GET failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_connecttest_head), TAG, "register /connecttest.txt HEAD failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_ncsi), TAG, "register /ncsi.txt GET failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &captive_ncsi_head), TAG, "register /ncsi.txt HEAD failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &static_uri), TAG, "register static GET failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(s_server, &static_uri_head), TAG, "register static HEAD failed");
-    ESP_LOGI(TAG, "web server started on port %d", config.server_port);
+    ESP_LOGI(TAG, "web server listening on port %d", config.server_port);
     return ESP_OK;
 }
 
 void web_server_stop(void)
 {
-    if (s_server != NULL) {
-        httpd_stop(s_server);
-        s_server = NULL;
+    if (s_server == NULL) {
+        return;
     }
+
+    httpd_stop(s_server);
+    s_server = NULL;
+    ESP_LOGI(TAG, "web server stopped");
 }

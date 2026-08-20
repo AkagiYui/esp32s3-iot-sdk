@@ -1,30 +1,43 @@
 idf_component_register(
     SRCS
+        "api_handlers.c"
         "app_main.c"
         "app_state.c"
         "button_monitor.c"
         "device_info.c"
         "dns_captive.c"
+        "dns_message.c"
+        "http_utils.c"
+        "json_file.c"
+        "led_color.c"
+        "ota_service.c"
+        "settings_store.c"
         "status_led.c"
         "storage_fs.c"
+        "time_sync.c"
         "web_server.c"
         "wifi_config_store.c"
         "wifi_manager.c"
     PRIV_REQUIRES
-        spi_flash
-        joltwallet__littlefs
+        app_update
+        bootloader_support
+        esp_app_format
         esp_driver_gpio
         esp_driver_rmt
         esp_event
         esp_http_server
+        esp_hw_support
         esp_netif
+        esp_psram
+        esp_timer
         esp_wifi
         espressif__cjson
-        led_strip
+        espressif__led_strip
+        espressif__mdns
+        joltwallet__littlefs
         lwip
-        mdns
         nvs_flash
-        app_update
+        spi_flash
     INCLUDE_DIRS
         "."
         "${CMAKE_BINARY_DIR}/generated")
