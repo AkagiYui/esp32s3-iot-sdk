@@ -150,7 +150,10 @@ static void enter_provisioning(void)
     set_state(APP_STATE_PROVISIONING);
     stop_mdns();
     time_sync_stop();
-    wifi_manager_start_provisioning_ap();
+    esp_err_t err = wifi_manager_start_provisioning_ap();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "start provisioning AP failed: %s", esp_err_to_name(err));
+    }
     dns_captive_start();
     refresh_led();
 
@@ -164,7 +167,11 @@ static void enter_connecting(void)
     dns_captive_stop();
     wifi_manager_stop_provisioning_ap();
     refresh_led();
-    wifi_manager_start_sta_loop();
+
+    esp_err_t err = wifi_manager_start_sta_loop();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "start sta loop failed: %s", esp_err_to_name(err));
+    }
 }
 
 static void enter_online(void)
@@ -190,7 +197,11 @@ static void handle_wifi_lost(void)
     stop_mdns();
     time_sync_stop();
     refresh_led();
-    wifi_manager_start_sta_loop();
+
+    esp_err_t err = wifi_manager_start_sta_loop();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "start sta loop failed: %s", esp_err_to_name(err));
+    }
 }
 
 static void reboot_after_grace(void)
@@ -300,8 +311,12 @@ esp_err_t app_state_start(void)
     s_ctx.queue = xQueueCreate(APP_EVENT_QUEUE_LENGTH, sizeof(app_event_t));
     ESP_RETURN_ON_FALSE(s_ctx.queue != NULL, ESP_ERR_NO_MEM, TAG, "event queue alloc failed");
 
-    /* Web 服务在两种模式下都要在线，一次启动后就不再停。 */
-    ESP_RETURN_ON_ERROR(web_server_start(), TAG, "web server start failed");
+    /* Web 服务在两种模式下都要在线，一次启动后就不再停。
+     * 起不来也不应该拖垮整个设备：联网、状态灯、按键这些仍然要工作。 */
+    esp_err_t web_err = web_server_start();
+    if (web_err != ESP_OK) {
+        ESP_LOGE(TAG, "web server start failed: %s", esp_err_to_name(web_err));
+    }
 
     BaseType_t created = xTaskCreate(app_state_task, "app_state", KENKO_TASK_STACK_STATE, NULL,
                                      KENKO_TASK_PRIORITY_STATE, NULL);

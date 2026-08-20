@@ -16,8 +16,9 @@
 #include "freertos/event_groups.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-#include "lwip/ip4_addr.h"
 #include "settings_store.h"
+#include "lwip/ip4_addr.h"
+#include "device_info.h"
 #include "wifi_config_store.h"
 
 static const char *TAG = "wifi_manager";
@@ -155,7 +156,12 @@ static esp_err_t configure_softap_network(void)
     IP4_ADDR(&ip_info.gw, KENKO_AP_IP0, KENKO_AP_IP1, KENKO_AP_IP2, KENKO_AP_IP3);
     IP4_ADDR(&ip_info.netmask, KENKO_AP_NETMASK0, KENKO_AP_NETMASK1, KENKO_AP_NETMASK2, KENKO_AP_NETMASK3);
 
-    ESP_RETURN_ON_ERROR(esp_netif_dhcps_stop(s_ap_netif), TAG, "stop dhcps failed");
+    /* AP netif 默认就带着「DHCPS 已启动」的状态，这里必须容忍 ALREADY_STOPPED，
+     * 否则启动阶段配置静态地址会直接失败。 */
+    esp_err_t err = esp_netif_dhcps_stop(s_ap_netif);
+    if (err != ESP_OK && err != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
+        ESP_RETURN_ON_ERROR(err, TAG, "stop dhcps failed");
+    }
     ESP_RETURN_ON_ERROR(esp_netif_set_ip_info(s_ap_netif, &ip_info), TAG, "set AP ip failed");
 
     /* DHCP 下发的 DNS 指向设备自身，captive portal 才能接管域名解析。 */
@@ -165,7 +171,11 @@ static esp_err_t configure_softap_network(void)
     };
     ESP_RETURN_ON_ERROR(esp_netif_set_dns_info(s_ap_netif, ESP_NETIF_DNS_MAIN, &dns), TAG,
                         "set AP dns failed");
-    ESP_RETURN_ON_ERROR(esp_netif_dhcps_start(s_ap_netif), TAG, "start dhcps failed");
+
+    err = esp_netif_dhcps_start(s_ap_netif);
+    if (err != ESP_OK && err != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED) {
+        ESP_RETURN_ON_ERROR(err, TAG, "start dhcps failed");
+    }
     return ESP_OK;
 }
 
@@ -277,10 +287,13 @@ esp_err_t wifi_manager_init(void)
     s_ap_netif = esp_netif_create_default_wifi_ap();
     ESP_RETURN_ON_FALSE(s_sta_netif != NULL && s_ap_netif != NULL, ESP_FAIL, TAG, "netif create failed");
 
-    app_settings_t settings;
-    settings_store_get(&settings);
-    ESP_RETURN_ON_ERROR(esp_netif_set_hostname(s_sta_netif, settings.device_name), TAG,
-                        "set hostname failed");
+    /* DHCP 上报的主机名必须是合法的 DNS 标签，所以用 MAC 派生的固定名，
+     * 而不是用户可以随便填的设备名。设置失败也不该拖垮启动。 */
+    const char *hostname = device_info_identity()->mdns_hostname;
+    esp_err_t hostname_err = esp_netif_set_hostname(s_sta_netif, hostname);
+    if (hostname_err != ESP_OK) {
+        ESP_LOGW(TAG, "set hostname failed: %s", esp_err_to_name(hostname_err));
+    }
 
     ESP_RETURN_ON_ERROR(configure_softap_network(), TAG, "configure AP network failed");
 
