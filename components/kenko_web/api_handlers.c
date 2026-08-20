@@ -30,6 +30,13 @@ static const char *TAG = "api";
 
 /* ---------------- 响应辅助 ---------------- */
 
+/**
+ * 状态码到状态行的映射。
+ *
+ * 未收录的码一律当成 500 并记一条错误日志，绝不能悄悄回落到 200——
+ * 之前 401 和 429 就漏在这里，于是"未授权"以 HTTP 200 发了出去，
+ * 前端按 response.ok 判断，既不弹登录框，又把错误体当数据用。
+ */
 static const char *status_line(int status_code)
 {
     switch (status_code) {
@@ -39,6 +46,10 @@ static const char *status_line(int status_code)
         return "202 Accepted";
     case 400:
         return "400 Bad Request";
+    case 401:
+        return "401 Unauthorized";
+    case 403:
+        return "403 Forbidden";
     case 404:
         return "404 Not Found";
     case 405:
@@ -47,12 +58,15 @@ static const char *status_line(int status_code)
         return "409 Conflict";
     case 413:
         return "413 Payload Too Large";
+    case 429:
+        return "429 Too Many Requests";
     case 500:
         return "500 Internal Server Error";
     case 503:
         return "503 Service Unavailable";
     default:
-        return "200 OK";
+        ESP_LOGE(TAG, "status code %d has no status line, falling back to 500", status_code);
+        return "500 Internal Server Error";
     }
 }
 

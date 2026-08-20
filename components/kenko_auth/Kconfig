@@ -8,10 +8,19 @@ menu "Kenko auth"
     config KENKO_AUTH_PBKDF2_ITERATIONS
         int "PBKDF2 iterations"
         range 1000 200000
-        default 20000
+        default 5000
         help
             越大越难被离线爆破，代价是每次登录都要算这么多轮。
-            ESP32-S3 有 SHA 硬件加速，20000 轮大约几百毫秒。
+
+            ESP32-S3 实测约 147us/轮（硬件 SHA 已启用，瓶颈在 PSA 每轮的接口
+            开销而非哈希本身）：5000 轮约 0.75 秒，20000 轮约 3 秒。
+
+            设备的 HTTP 服务是单任务顺序处理的，登录期间所有请求都会被堵住，
+            所以这个值直接决定了"登录时设备卡多久"。
+
+            需要说明的是，这里的轮数在多大范围内都挡不住 GPU 爆破一个弱口令，
+            真正起作用的是口令强度本身；轮数保护的主要是口令被复用到别处的场景。
+            改动只影响之后新设的口令，已存的记录会沿用它自己保存的轮数。
 
     config KENKO_AUTH_MAX_SESSIONS
         int "Maximum concurrent sessions"
