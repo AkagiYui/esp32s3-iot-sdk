@@ -50,6 +50,8 @@ export function devApiMock(): Plugin {
     led_brightness: 100,
   };
 
+  // 与固件一致：配网模式下不校验令牌，接入局域网后所有接口都要令牌。
+  let apiTokenValue = "devtoken00000000000000000000dead";
   let provisioning = false;
   let connected = true;
   let otaState: "idle" | "receiving" | "ready" | "failed" = "idle";
@@ -111,6 +113,17 @@ export function devApiMock(): Plugin {
           largest_free_block: 8_126_464,
         },
       },
+      tasks: [
+        { name: "IDLE0", priority: 0, stack_free: 1_136 },
+        { name: "IDLE1", priority: 0, stack_free: 1_180 },
+        { name: "app_state", priority: 6, stack_free: 2_048 },
+        { name: "wifi_sta_loop", priority: 5, stack_free: 1_792 },
+        { name: "httpd", priority: 5, stack_free: 3_456 },
+        { name: "status_led", priority: 4, stack_free: 1_920 },
+        { name: "button_monitor", priority: 5, stack_free: 2_240 },
+        { name: "tiT", priority: 18, stack_free: 1_408 },
+        { name: "wifi", priority: 23, stack_free: 1_664 },
+      ],
     },
     time: {
       synced: true,
@@ -142,6 +155,8 @@ export function devApiMock(): Plugin {
     apply: "serve",
 
     configureServer(server) {
+      server.config.logger.info(`[dev-api-mock] api token: ${apiTokenValue}`);
+
       server.middlewares.use("/api", (req, res, next) => {
         const path = req.url?.split("?")[0] ?? "";
         const method = req.method ?? "GET";
@@ -154,6 +169,28 @@ export function devApiMock(): Plugin {
         };
         const fail = (status: number, code: string, message: string) =>
           json({ error: { code, message } }, status);
+
+        if (!provisioning) {
+          const header = req.headers.authorization ?? "";
+          const presented = header.toLowerCase().startsWith("bearer ")
+            ? header.slice(7)
+            : ((req.headers["x-api-token"] as string | undefined) ?? "");
+          if (presented !== apiTokenValue) {
+            res.setHeader("WWW-Authenticate", 'Bearer realm="kenko"');
+            fail(401, "unauthorized", "a valid api token is required");
+            return;
+          }
+        }
+
+        if (path === "/system/token" && (method === "GET" || method === "POST")) {
+          if (method === "POST") {
+            apiTokenValue = Array.from({ length: 32 }, (_, index) =>
+              "0123456789abcdef".charAt((index * 7 + Date.now()) % 16),
+            ).join("");
+          }
+          json({ token: apiTokenValue });
+          return;
+        }
 
         if (path === "/system/info" && method === "GET") {
           json(systemInfo());

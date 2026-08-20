@@ -247,7 +247,7 @@ esp_err_t web_server_start(void)
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.stack_size = CONFIG_KENKO_HTTPD_TASK_STACK;
     config.max_open_sockets = CONFIG_KENKO_HTTPD_MAX_SOCKETS;
-    config.max_uri_handlers = 20;
+    config.max_uri_handlers = CONFIG_KENKO_HTTPD_MAX_URI_HANDLERS;
     config.lru_purge_enable = true;
     config.recv_wait_timeout = 10;
     config.send_wait_timeout = 10;

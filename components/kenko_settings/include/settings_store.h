@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "esp_err.h"
@@ -8,6 +9,8 @@
 
 #define SETTINGS_DEVICE_NAME_MAX_LEN 33
 #define SETTINGS_TIMEZONE_MAX_LEN 40
+/** 32 个十六进制字符 + 结尾 NUL。 */
+#define SETTINGS_API_TOKEN_LEN 33
 
 /** 用户可修改的设备设置，持久化在 LittleFS 的 settings.json。 */
 typedef struct {
@@ -34,3 +37,14 @@ esp_err_t settings_store_reset(void);
 
 /** 校验设置是否合法，供接口层在写入前给出精确的错误信息。 */
 bool settings_store_validate(const app_settings_t *settings, const char **reason);
+
+/**
+ * 取接口访问令牌。
+ *
+ * 令牌刻意不放进 app_settings_t：它不是"用户设置"，不能被 PUT /api/settings 改写，
+ * 也不能出现在任何返回给前端的设置快照里。
+ */
+void settings_store_get_api_token(char *out, size_t out_size);
+
+/** 重新生成接口访问令牌并落盘，旧令牌立即失效。 */
+esp_err_t settings_store_rotate_api_token(char *out, size_t out_size);

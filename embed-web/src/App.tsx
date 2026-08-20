@@ -1,11 +1,13 @@
-import { ErrorBoundary, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, ErrorBoundary, onCleanup, onMount, Show } from "solid-js";
 import "./lib/theme";
 import ConnectionBanner from "./components/ConnectionBanner";
 import DialogHost from "./components/DialogHost";
 import NavBar from "./components/NavBar";
 import RouteView from "./components/RouteView";
 import ToastHost from "./components/ToastHost";
-import { DEVICE_STATE_LABELS, subscribeDevice, systemInfo } from "./lib/device";
+import TokenGate from "./components/TokenGate";
+import { apiToken, setApiToken } from "./lib/auth";
+import { DEVICE_STATE_LABELS, fetchApiToken, subscribeDevice, systemInfo } from "./lib/device";
 import { cx } from "./lib/cx";
 import styles from "./App.module.css";
 
@@ -20,6 +22,17 @@ export default function App() {
   onMount(() => {
     // 全局只订阅一次设备状态轮询，页面从中读取，避免每个页面各拉一份。
     onCleanup(subscribeDevice());
+  });
+
+  // 配网模式下接口不校验令牌，正好趁这个窗口把令牌取回来存下，
+  // 等设备切到局域网后用户就已经是授权状态了。
+  createEffect(() => {
+    if (!systemInfo()?.device.provisioning || apiToken()) {
+      return;
+    }
+    void fetchApiToken()
+      .then((result) => setApiToken(result.token))
+      .catch(() => undefined);
   });
 
   const deviceName = () => systemInfo()?.device.name ?? "掌上设备控制台";
@@ -57,6 +70,7 @@ export default function App() {
         <NavBar />
       </div>
 
+      <TokenGate />
       <DialogHost />
       <ToastHost />
     </>

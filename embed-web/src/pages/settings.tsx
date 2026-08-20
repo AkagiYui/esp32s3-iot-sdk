@@ -3,7 +3,12 @@ import { createStore, reconcile } from "solid-js/store";
 import { Dynamic } from "solid-js/web";
 import {
   Clock,
+  Copy,
+  Eye,
+  EyeOff,
+  KeyRound,
   Lightbulb,
+  RefreshCw,
   Monitor,
   Moon,
   Palette,
@@ -17,7 +22,15 @@ import Button from "@/components/Button";
 import Card from "@/components/Card";
 import InfoRow from "@/components/InfoRow";
 import { describeError } from "@/lib/api";
-import { factoryResetDevice, rebootDevice, refreshSystemInfo, systemInfo } from "@/lib/device";
+import { apiToken, setApiToken } from "@/lib/auth";
+import {
+  factoryResetDevice,
+  fetchApiToken,
+  rebootDevice,
+  refreshSystemInfo,
+  rotateApiToken,
+  systemInfo,
+} from "@/lib/device";
 import { showConfirm, showToast } from "@/lib/feedback";
 import {
   diffSettings,
@@ -56,6 +69,8 @@ export default function SettingsPage() {
   const [saved, setSaved] = createSignal<DeviceSettings | undefined>(undefined);
   const [loading, setLoading] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
+  const [tokenVisible, setTokenVisible] = createSignal(false);
+  const [rotating, setRotating] = createSignal(false);
 
   const dirty = () => diffSettings(saved(), draft) !== undefined;
 
@@ -107,6 +122,40 @@ export default function SettingsPage() {
     }
   }
 
+  async function copyToken() {
+    try {
+      await navigator.clipboard.writeText(apiToken());
+      showToast("令牌已复制", "success");
+    } catch {
+      // 非安全上下文（http 直连 IP）下 clipboard 不可用，退化为让用户手动选中
+      setTokenVisible(true);
+      showToast("当前环境不允许自动复制，请手动选中", "warning");
+    }
+  }
+
+  async function rotateToken() {
+    const confirmed = await showConfirm(
+      "旧令牌会立即失效，其它已授权的浏览器需要重新输入新令牌。",
+      "重新生成令牌",
+      true,
+    );
+    if (confirmed !== "ok") {
+      return;
+    }
+
+    setRotating(true);
+    try {
+      const result = await rotateApiToken();
+      setApiToken(result.token);
+      setTokenVisible(true);
+      showToast("令牌已更新", "success");
+    } catch (error) {
+      showToast(describeError(error), "error");
+    } finally {
+      setRotating(false);
+    }
+  }
+
   async function reboot() {
     if ((await showConfirm("设备会立即重启，页面将短暂失联。", "重启设备", true)) !== "ok") {
       return;
@@ -136,7 +185,13 @@ export default function SettingsPage() {
     }
   }
 
-  onMount(() => void load());
+  onMount(() => {
+    void load();
+    // 与设备上的令牌保持一致：本地存的可能是轮换前的旧值
+    void fetchApiToken()
+      .then((result) => setApiToken(result.token))
+      .catch(() => undefined);
+  });
 
   return (
     <div class="page">
@@ -200,6 +255,40 @@ export default function SettingsPage() {
         </InfoRow>
 
         <InfoRow label="默认名称" value={systemInfo()?.device.default_name} mono tone="muted" />
+      </Card>
+
+      <Card
+        icon={KeyRound}
+        title="访问令牌"
+        subtitle="设备接入局域网后，所有接口都需要它；配网模式下不校验"
+      >
+        <InfoRow label="令牌" hint="换浏览器访问时需要手动填入">
+          <span class={styles.token}>
+            {tokenVisible() ? apiToken() || "—" : "•".repeat(Math.min(apiToken().length, 16))}
+          </span>
+        </InfoRow>
+        <div class={styles.tokenActions}>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={tokenVisible() ? EyeOff : Eye}
+            onClick={() => setTokenVisible(!tokenVisible())}
+          >
+            {tokenVisible() ? "隐藏" : "显示"}
+          </Button>
+          <Button variant="ghost" size="sm" icon={Copy} onClick={() => void copyToken()}>
+            复制
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={RefreshCw}
+            loading={rotating()}
+            onClick={() => void rotateToken()}
+          >
+            重新生成
+          </Button>
+        </div>
       </Card>
 
       <Card icon={Clock} title="时间">

@@ -15,6 +15,12 @@ menu "Kenko web server"
         range 1 13
         default 7
 
+    config KENKO_HTTPD_MAX_URI_HANDLERS
+        int "Maximum registered URI handlers"
+        default 24
+        help
+            接口路由 + 静态资源兜底。加新接口时记得留够余量。
+
     config KENKO_API_BODY_MAX_BYTES
         int "Maximum JSON request body"
         default 4096

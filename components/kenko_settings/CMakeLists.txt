@@ -2,4 +2,4 @@
 idf_component_register(
     SRCS "settings_store.c"
     INCLUDE_DIRS "include"
-    PRIV_REQUIRES espressif__cjson kenko_storage)
+    PRIV_REQUIRES espressif__cjson esp_hw_support kenko_storage)

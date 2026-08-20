@@ -99,3 +99,17 @@
     transition: none;
   }
 }
+
+.token {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.tokenActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

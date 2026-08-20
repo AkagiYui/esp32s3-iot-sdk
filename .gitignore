@@ -8,6 +8,10 @@ sdkconfig
 sdkconfig.old
 sdkconfig.ci
 
+# 签名私钥：泄露等于任何人都能给你的设备推 OTA
+secure_boot_signing_key.pem
+*.pem
+
 # 编辑器
 .vscode/
 .idea/

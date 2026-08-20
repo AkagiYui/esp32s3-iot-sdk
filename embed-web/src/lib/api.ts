@@ -5,6 +5,8 @@
  * 所以每个请求都必须有超时和结构化的错误，绝不能让界面无限转圈。
  */
 
+import { apiToken, setAuthRequired } from "./auth";
+
 export const API_TIMEOUT_MS = 8000;
 
 type ApiErrorBody = {
@@ -77,12 +79,21 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const { method = "GET", body, timeoutMs = API_TIMEOUT_MS, signal: external } = options;
   const [signal, cleanup] = combineSignals(timeoutMs, external);
 
+  const headers: Record<string, string> = {};
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+  const token = apiToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   let response: Response;
   try {
     response = await fetch(path, {
       method,
       signal,
-      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (error) {
@@ -98,6 +109,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     );
   }
   cleanup();
+
+  if (response.status === 401) {
+    // 令牌缺失或失效：把界面切到"请输入令牌"，而不是反复弹一堆请求失败
+    setAuthRequired(true);
+    throw new ApiError("需要访问令牌", 401, "unauthorized");
+  }
 
   if (!response.ok) {
     throw await readError(response);

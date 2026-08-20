@@ -3,6 +3,7 @@ import {
   ChartColumn,
   HardDrive,
   LayoutDashboard,
+  ListTree,
   MemoryStick,
   Microchip,
   Radio,
@@ -30,6 +31,10 @@ export default function DashboardPage() {
   const info = systemInfo;
 
   const used = (heap: { total: number; free: number }) => Math.max(0, heap.total - heap.free);
+
+  /* 栈余量最少的排在最前面——那才是下一个会溢出的任务。 */
+  const tasksByRisk = () =>
+    [...(info()?.runtime.tasks ?? [])].sort((a, b) => a.stack_free - b.stack_free);
 
   return (
     <div class="page">
@@ -136,6 +141,20 @@ export default function DashboardPage() {
               <Show when={data().wifi.ap_active}>
                 <InfoRow label="热点接入数" value={`${data().wifi.ap_clients} 台`} />
               </Show>
+            </Card>
+
+            <Card icon={ListTree} title="任务栈" subtitle="剩余最少的排在前面，这是下一个会溢出的">
+              <For each={tasksByRisk()}>
+                {(task) => (
+                  <InfoRow
+                    label={task.name}
+                    hint={`优先级 ${task.priority}`}
+                    value={formatBytes(task.stack_free)}
+                    tone={task.stack_free < 512 ? "danger" : "default"}
+                    mono
+                  />
+                )}
+              </For>
             </Card>
 
             <Card icon={Microchip} title="硬件">

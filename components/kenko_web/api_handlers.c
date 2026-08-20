@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "cJSON.h"
 #include "device_info.h"
@@ -367,7 +368,95 @@ static esp_err_t system_info_handler(httpd_req_t *req)
     return send_json(req, 200, root);
 }
 
+/* ---------------- 鉴权 ---------------- */
+
+/** 定长比较，不因首个不同字节的位置而提前返回，避免时序侧信道。 */
+static bool constant_time_equals(const char *left, const char *right, size_t length)
+{
+    uint8_t diff = 0;
+    for (size_t index = 0; index < length; ++index) {
+        diff |= (uint8_t)((unsigned char)left[index] ^ (unsigned char)right[index]);
+    }
+    return diff == 0;
+}
+
+/**
+ * 判断请求是否被授权。
+ *
+ * 配网模式下不校验：此时设备开着无密码热点，用户手上还没有令牌，
+ * 物理接近就是这一阶段的信任边界。一旦接入局域网，所有接口都要令牌。
+ */
+static bool request_is_authorized(httpd_req_t *req)
+{
+    if (kenko_state_is_provisioning()) {
+        return true;
+    }
+
+    char expected[SETTINGS_API_TOKEN_LEN] = {0};
+    settings_store_get_api_token(expected, sizeof(expected));
+    size_t expected_len = strnlen(expected, sizeof(expected));
+    if (expected_len == 0) {
+        /* 没有令牌就不拦，否则配置分区异常时会把用户彻底锁在外面。 */
+        ESP_LOGW(TAG, "no api token available, allowing request");
+        return true;
+    }
+
+    char header[128] = {0};
+    const char *presented = NULL;
+
+    if (httpd_req_get_hdr_value_str(req, "Authorization", header, sizeof(header)) == ESP_OK &&
+        strncasecmp(header, "Bearer ", 7) == 0) {
+        presented = header + 7;
+    }
+    if (presented == NULL &&
+        httpd_req_get_hdr_value_str(req, "X-API-Token", header, sizeof(header)) == ESP_OK) {
+        presented = header;
+    }
+    if (presented == NULL) {
+        return false;
+    }
+
+    if (strnlen(presented, sizeof(header)) != expected_len) {
+        return false;
+    }
+    return constant_time_equals(presented, expected, expected_len);
+}
+
+static esp_err_t send_unauthorized(httpd_req_t *req)
+{
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Bearer realm=\"kenko\"");
+    return send_error(req, 401, "unauthorized", "a valid api token is required");
+}
+
 /* ---------------- 系统操作接口 ---------------- */
+
+static esp_err_t system_token_handler(httpd_req_t *req)
+{
+    char token[SETTINGS_API_TOKEN_LEN] = {0};
+
+    switch (req->method) {
+    case HTTP_GET:
+    case HTTP_HEAD:
+        settings_store_get_api_token(token, sizeof(token));
+        break;
+    case HTTP_POST: {
+        esp_err_t err = settings_store_rotate_api_token(token, sizeof(token));
+        if (err != ESP_OK) {
+            return send_error(req, 500, "persist_failed", esp_err_to_name(err));
+        }
+        break;
+    }
+    default:
+        return send_method_not_allowed(req, "GET, HEAD, POST");
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        return send_error(req, 500, "no_memory", "out of memory");
+    }
+    cJSON_AddStringToObject(root, "token", token);
+    return send_json(req, 200, root);
+}
 
 static esp_err_t system_reboot_handler(httpd_req_t *req)
 {
@@ -883,28 +972,68 @@ static esp_err_t api_not_found_handler(httpd_req_t *req)
 
 /* ---------------- 注册 ---------------- */
 
+typedef esp_err_t (*api_handler_fn)(httpd_req_t *req);
+
+typedef struct {
+    const char *uri;
+    api_handler_fn handler;
+} api_route_t;
+
+/* 顺序即匹配顺序：具体路径必须排在通配兜底之前。 */
+static const api_route_t k_routes[] = {
+    {"/api/system/info", system_info_handler},
+    {"/api/system/reboot", system_reboot_handler},
+    {"/api/system/factory-reset", system_factory_reset_handler},
+    {"/api/system/ota/confirm", system_ota_confirm_handler},
+    {"/api/system/ota", system_ota_handler},
+    {"/api/system/revert-to-factory", system_revert_factory_handler},
+    {"/api/system/coredump", system_coredump_handler},
+    {"/api/system/token", system_token_handler},
+    {"/api/settings", settings_handler},
+    {"/api/wifi/status", wifi_status_handler},
+    {"/api/wifi/scan", wifi_scan_handler},
+    {"/api/wifi/config", wifi_config_handler},
+    {"/api/wifi/connect", wifi_connect_handler},
+    {"/api/wifi/provision", wifi_provision_handler},
+    {"/api", api_not_found_handler},
+    {"/api/*", api_not_found_handler},
+};
+
+/**
+ * 所有接口的统一入口。
+ *
+ * esp_http_server 没有中间件，把鉴权收在这一个地方，比在十几个处理函数里
+ * 各写一遍要可靠得多——漏掉一处就等于没做。
+ */
+static esp_err_t api_dispatch(httpd_req_t *req)
+{
+    const api_route_t *route = req->user_ctx;
+    if (route == NULL) {
+        return send_error(req, 500, "internal", "route not bound");
+    }
+
+    if (!request_is_authorized(req)) {
+        ESP_LOGW(TAG, "rejected unauthorized %s", route->uri);
+        return send_unauthorized(req);
+    }
+
+    return route->handler(req);
+}
+
 esp_err_t api_handlers_register(httpd_handle_t server)
 {
-    /* 顺序即匹配顺序：具体路径必须排在通配兜底之前。 */
-    static const httpd_uri_t routes[] = {
-        {.uri = "/api/system/info", .method = HTTP_ANY, .handler = system_info_handler},
-        {.uri = "/api/system/reboot", .method = HTTP_ANY, .handler = system_reboot_handler},
-        {.uri = "/api/system/factory-reset", .method = HTTP_ANY, .handler = system_factory_reset_handler},
-        {.uri = "/api/system/ota/confirm", .method = HTTP_ANY, .handler = system_ota_confirm_handler},
-        {.uri = "/api/system/ota", .method = HTTP_ANY, .handler = system_ota_handler},
-        {.uri = "/api/settings", .method = HTTP_ANY, .handler = settings_handler},
-        {.uri = "/api/wifi/status", .method = HTTP_ANY, .handler = wifi_status_handler},
-        {.uri = "/api/wifi/scan", .method = HTTP_ANY, .handler = wifi_scan_handler},
-        {.uri = "/api/wifi/config", .method = HTTP_ANY, .handler = wifi_config_handler},
-        {.uri = "/api/wifi/connect", .method = HTTP_ANY, .handler = wifi_connect_handler},
-        {.uri = "/api/wifi/provision", .method = HTTP_ANY, .handler = wifi_provision_handler},
-        {.uri = "/api/*", .method = HTTP_ANY, .handler = api_not_found_handler},
-    };
+    for (size_t index = 0; index < sizeof(k_routes) / sizeof(k_routes[0]); ++index) {
+        const httpd_uri_t uri = {
+            .uri = k_routes[index].uri,
+            .method = HTTP_ANY,
+            .handler = api_dispatch,
+            /* 静态数组，生命周期覆盖整个 server。 */
+            .user_ctx = (void *)&k_routes[index],
+        };
 
-    for (size_t index = 0; index < sizeof(routes) / sizeof(routes[0]); ++index) {
-        esp_err_t err = httpd_register_uri_handler(server, &routes[index]);
+        esp_err_t err = httpd_register_uri_handler(server, &uri);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "register %s failed: %s", routes[index].uri, esp_err_to_name(err));
+            ESP_LOGE(TAG, "register %s failed: %s", k_routes[index].uri, esp_err_to_name(err));
             return err;
         }
     }

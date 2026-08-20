@@ -1,0 +1,18 @@
+# OTA 镜像签名（不启用硬件 Secure Boot）。
+#
+# 打开后，bootloader 与 esp_ota_ops 会校验镜像上的 RSA-3072 签名，
+# 未经你私钥签名的固件无法通过 OTA 写入——这挡住的正是"局域网内任何人都能
+# 往 /api/system/ota 推固件"这条攻击路径。它不防物理接触（bootloader 本身
+# 仍可被重新烧录），要防物理接触需要真正的 Secure Boot + eFuse 烧写。
+#
+# 用法：
+#   espsecure generate-signing-key --version 2 --scheme rsa3072 secure_boot_signing_key.pem
+#   idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.signed" fullclean build
+#
+# 私钥绝对不要提交，它已经在 .gitignore 里。丢了私钥就再也无法给这批设备推 OTA。
+
+CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT=y
+CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME=y
+CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT=y
+CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES=y
+CONFIG_SECURE_BOOT_SIGNING_KEY="secure_boot_signing_key.pem"

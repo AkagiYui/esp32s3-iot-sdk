@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { ApiError, apiRequest, describeError } from "./api";
+import { authRequired, setApiToken, setAuthRequired } from "./auth";
 
 const fetchMock = vi.fn();
 
@@ -17,10 +18,14 @@ describe("apiRequest", () => {
   beforeEach(() => {
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
+    setApiToken("");
+    setAuthRequired(false);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    setApiToken("");
+    setAuthRequired(false);
   });
 
   it("GET 请求不带 body 与 Content-Type", async () => {
@@ -32,7 +37,40 @@ describe("apiRequest", () => {
     expect(url).toBe("/api/system/info");
     expect(init.method).toBe("GET");
     expect(init.body).toBeUndefined();
-    expect(init.headers).toBeUndefined();
+    expect(init.headers).toEqual({});
+  });
+
+  it("有令牌时带上 Authorization 头", async () => {
+    setApiToken("deadbeef");
+    fetchMock.mockResolvedValue(response({}));
+
+    await apiRequest("/api/system/info");
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.headers).toEqual({ Authorization: "Bearer deadbeef" });
+  });
+
+  it("带 body 且有令牌时两个头都在", async () => {
+    setApiToken("deadbeef");
+    fetchMock.mockResolvedValue(response({}));
+
+    await apiRequest("/api/settings", { method: "PUT", body: { a: 1 } });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.headers).toEqual({
+      "Content-Type": "application/json",
+      Authorization: "Bearer deadbeef",
+    });
+  });
+
+  it("401 会切到需要令牌的状态，而不是当成普通错误", async () => {
+    fetchMock.mockResolvedValue(response({}, { ok: false, status: 401 }));
+
+    await expect(apiRequest("/api/system/info")).rejects.toMatchObject({
+      status: 401,
+      code: "unauthorized",
+    });
+    expect(authRequired()).toBe(true);
   });
 
   it("带 body 时序列化为 JSON 并设置 Content-Type", async () => {

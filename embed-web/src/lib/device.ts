@@ -16,6 +16,13 @@ export type HeapStats = {
   largest_free_block: number;
 };
 
+export type TaskStats = {
+  name: string;
+  priority: number;
+  /** 该任务栈的历史最小剩余字节数。 */
+  stack_free: number;
+};
+
 export type SystemInfo = {
   device: {
     name: string;
@@ -48,6 +55,7 @@ export type SystemInfo = {
       /** 仅在设备启用了 PSRAM 时出现。 */
       psram?: HeapStats;
     };
+    tasks: TaskStats[];
   };
   time: {
     synced: boolean;
@@ -73,6 +81,16 @@ const POLL_MAX_INTERVAL_MS = 30000;
 
 export function fetchSystemInfo(): Promise<SystemInfo> {
   return apiRequest<SystemInfo>("/api/system/info");
+}
+
+/** 取当前的接口访问令牌（配网模式下无需鉴权即可读取）。 */
+export function fetchApiToken(): Promise<{ token: string }> {
+  return apiRequest<{ token: string }>("/api/system/token");
+}
+
+/** 重新生成令牌，旧令牌立即失效。 */
+export function rotateApiToken(): Promise<{ token: string }> {
+  return apiRequest<{ token: string }>("/api/system/token", { method: "POST" });
 }
 
 export function rebootDevice(): Promise<{ status: string }> {
