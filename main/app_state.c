@@ -11,7 +11,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
-#include "json_file.h"
 #include "mdns.h"
 #include "ota_service.h"
 #include "settings_store.h"
@@ -207,10 +206,13 @@ static void handle_factory_reset(void)
     ESP_LOGW(TAG, "factory reset requested");
     status_led_set(KENKO_LED_PURPLE, LED_PATTERN_BLINK);
 
+    /* 先把内存里的状态清干净，再尽力格式化分区：即使格式化失败，
+     * 重启后也不会再用旧凭据自动联网。 */
     wifi_config_store_clear();
     settings_store_reset();
-    json_file_delete(KENKO_WIFI_CONFIG_FILE);
-    json_file_delete(KENKO_SETTINGS_FILE);
+    if (storage_fs_storage_available()) {
+        storage_fs_format_storage();
+    }
 
     reboot_after_grace();
 }

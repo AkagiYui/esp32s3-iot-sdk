@@ -17,6 +17,20 @@ export function fetchOtaStatus(): Promise<OtaStatus> {
   return apiRequest<OtaStatus>("/api/system/ota");
 }
 
+export type CoredumpStatus = {
+  present: boolean;
+};
+
+/** 查询设备上是否存有崩溃现场。 */
+export function fetchCoredump(): Promise<CoredumpStatus> {
+  return apiRequest<CoredumpStatus>("/api/system/coredump");
+}
+
+/** 擦除崩溃现场，为下一次崩溃腾出空间。 */
+export function eraseCoredump(): Promise<CoredumpStatus> {
+  return apiRequest<CoredumpStatus>("/api/system/coredump", { method: "DELETE" });
+}
+
 export function confirmFirmware(): Promise<OtaStatus> {
   return apiRequest<OtaStatus>("/api/system/ota/confirm", { method: "POST" });
 }

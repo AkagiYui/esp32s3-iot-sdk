@@ -275,6 +275,7 @@ static esp_err_t system_info_handler(httpd_req_t *req)
     cJSON_AddStringToObject(firmware, "idf_version", identity->idf_version);
     cJSON_AddStringToObject(firmware, "running_partition", ota.running_partition);
     cJSON_AddBoolToObject(firmware, "awaiting_confirm", ota.awaiting_confirm);
+    cJSON_AddBoolToObject(firmware, "coredump_present", ota_service_has_coredump());
     cJSON_AddItemToObject(root, "firmware", firmware);
 
     cJSON *runtime = cJSON_CreateObject();
@@ -749,6 +750,32 @@ static esp_err_t wifi_provision_handler(httpd_req_t *req)
 
     app_state_post_event(APP_EVENT_ENTER_PROVISIONING);
     return err;
+}
+
+/** 崩溃现场：有 coredump 时可以用 espcoredump.py 从设备里读出来分析，看完再擦掉。 */
+static esp_err_t system_coredump_handler(httpd_req_t *req)
+{
+    if (req->method == HTTP_GET || req->method == HTTP_HEAD) {
+        cJSON *root = cJSON_CreateObject();
+        if (root == NULL) {
+            return send_error(req, 500, "no_memory", "out of memory");
+        }
+        cJSON_AddBoolToObject(root, "present", ota_service_has_coredump());
+        return send_json(req, 200, root);
+    }
+
+    if (req->method != HTTP_DELETE) {
+        return send_method_not_allowed(req, "GET, HEAD, DELETE");
+    }
+
+    esp_err_t err = ota_service_erase_coredump();
+    if (err != ESP_OK) {
+        return send_error(req, 500, "erase_failed", esp_err_to_name(err));
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "present", false);
+    return send_json(req, 200, root);
 }
 
 static esp_err_t api_not_found_handler(httpd_req_t *req)

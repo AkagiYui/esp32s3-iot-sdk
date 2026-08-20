@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "esp_app_format.h"
+#include "esp_core_dump.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
@@ -300,4 +301,16 @@ esp_err_t ota_service_rollback(void)
 {
     ESP_LOGW(TAG, "rolling back to previous image");
     return esp_ota_mark_app_invalid_rollback_and_reboot();
+}
+
+bool ota_service_has_coredump(void)
+{
+    return esp_core_dump_image_check() == ESP_OK;
+}
+
+esp_err_t ota_service_erase_coredump(void)
+{
+    esp_err_t err = esp_core_dump_image_erase();
+    ESP_LOGI(TAG, "coredump erase: %s", esp_err_to_name(err));
+    return err;
 }

@@ -53,6 +53,7 @@ export function devApiMock(): Plugin {
   let provisioning = false;
   let connected = true;
   let otaState: "idle" | "receiving" | "ready" | "failed" = "idle";
+  let coredumpPresent = true;
 
   const wifiStatus = () => ({
     connected,
@@ -92,6 +93,7 @@ export function devApiMock(): Plugin {
       idf_version: "v6.0.2",
       running_partition: "ota_0",
       awaiting_confirm: false,
+      coredump_present: false,
     },
     runtime: {
       uptime_ms: Date.now() - startedAt,
@@ -170,6 +172,17 @@ export function devApiMock(): Plugin {
             otaState = "ready";
             json(otaStatus());
           }, 800);
+          return;
+        }
+
+        if (path === "/system/coredump" && method === "GET") {
+          json({ present: coredumpPresent });
+          return;
+        }
+
+        if (path === "/system/coredump" && method === "DELETE") {
+          coredumpPresent = false;
+          json({ present: false });
           return;
         }
 

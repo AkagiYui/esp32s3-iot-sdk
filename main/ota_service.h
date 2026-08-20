@@ -50,3 +50,9 @@ bool ota_service_awaiting_confirm(void);
 
 /** 允许的最大固件大小（目标分区容量）。 */
 size_t ota_service_max_image_size(void);
+
+/** coredump 分区里是否存在一份可用的崩溃现场。 */
+bool ota_service_has_coredump(void);
+
+/** 擦除已保存的崩溃现场。 */
+esp_err_t ota_service_erase_coredump(void);

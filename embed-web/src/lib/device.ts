@@ -31,6 +31,7 @@ export type SystemInfo = {
     idf_version: string;
     running_partition: string;
     awaiting_confirm: boolean;
+    coredump_present: boolean;
   };
   runtime: {
     uptime_ms: number;

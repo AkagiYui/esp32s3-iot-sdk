@@ -1,9 +1,11 @@
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import {
+  Bug,
   CircleCheck,
   HardDriveUpload,
   RefreshCw,
   RotateCw,
+  Trash2,
   TriangleAlert,
   Upload,
 } from "lucide-solid";
@@ -16,6 +18,8 @@ import { rebootDevice, refreshSystemInfo, systemInfo } from "@/lib/device";
 import { showConfirm, showToast } from "@/lib/feedback";
 import {
   confirmFirmware,
+  eraseCoredump,
+  fetchCoredump,
   fetchOtaStatus,
   uploadFirmware,
   validateFirmwareFile,
@@ -37,17 +41,37 @@ export default function FirmwarePage() {
   const [uploading, setUploading] = createSignal(false);
   const [sent, setSent] = createSignal(0);
   const [refreshing, setRefreshing] = createSignal(false);
+  const [coredump, setCoredump] = createSignal(false);
+  const [erasing, setErasing] = createSignal(false);
 
   let controller: AbortController | undefined;
 
   async function loadStatus() {
     setRefreshing(true);
     try {
-      setStatus(await fetchOtaStatus());
+      const [ota, dump] = await Promise.all([fetchOtaStatus(), fetchCoredump()]);
+      setStatus(ota);
+      setCoredump(dump.present);
     } catch (error) {
       showToast(describeError(error), "error");
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function dropCoredump() {
+    if ((await showConfirm("崩溃现场将被永久删除。", "擦除崩溃现场", true)) !== "ok") {
+      return;
+    }
+
+    setErasing(true);
+    try {
+      setCoredump((await eraseCoredump()).present);
+      showToast("崩溃现场已擦除", "success");
+    } catch (error) {
+      showToast(describeError(error), "error");
+    } finally {
+      setErasing(false);
     }
   }
 
@@ -168,6 +192,33 @@ export default function FirmwarePage() {
           }
         />
         <InfoRow label="OTA 分区容量" value={formatBytes(status()?.max_image_size ?? 0)} />
+      </Card>
+
+      <Card
+        icon={Bug}
+        title="崩溃现场"
+        subtitle={
+          coredump()
+            ? "设备上存有一份 coredump，可用 espcoredump.py 读出后分析"
+            : "上次启动以来没有记录到崩溃"
+        }
+      >
+        <InfoRow
+          label="状态"
+          value={coredump() ? "存在" : "无"}
+          tone={coredump() ? "danger" : "muted"}
+        />
+        <Show when={coredump()}>
+          <Button
+            variant="secondary"
+            icon={Trash2}
+            block
+            loading={erasing()}
+            onClick={() => void dropCoredump()}
+          >
+            擦除崩溃现场
+          </Button>
+        </Show>
       </Card>
 
       <Card icon={Upload} title="上传固件" subtitle="选择 idf.py build 产出的应用镜像（.bin）">

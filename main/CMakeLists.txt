@@ -31,6 +31,7 @@ idf_component_register(
         esp_psram
         esp_timer
         esp_wifi
+        espcoredump
         espressif__cjson
         espressif__led_strip
         espressif__mdns
