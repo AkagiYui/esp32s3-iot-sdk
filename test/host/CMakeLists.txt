@@ -11,7 +11,17 @@ enable_testing()
 
 set(MAIN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../main)
 
-add_compile_options(-Wall -Wextra -Werror -Wshadow -Wconversion -Wsign-conversion)
+# -Wtype-limits 要显式写出来：GCC 的 -Wextra 已经包含它，但 clang 没有，
+# 只靠本机的 clang 会漏掉恒真比较，到 CI 的 GCC 上才炸。
+add_compile_options(
+    -Wall
+    -Wextra
+    -Werror
+    -Wshadow
+    -Wconversion
+    -Wsign-conversion
+    -Wtype-limits
+)
 
 function(kenko_add_host_test name)
     add_executable(${name} ${name}.c ${ARGN})

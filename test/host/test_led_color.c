@@ -52,9 +52,9 @@ static void test_breath_curve_is_symmetric_and_bounded(void)
     uint8_t peak = led_color_breath_scale(127);
     CHECK(peak > 240);
 
+    /* 曲线关于 127/128 折返，因此 f(p) 必须等于 f(255 - p)。 */
     for (int phase = 0; phase <= 255; ++phase) {
-        uint8_t scale = led_color_breath_scale((uint8_t)phase);
-        CHECK(scale <= 255);
+        CHECK_INT(led_color_breath_scale((uint8_t)phase), led_color_breath_scale((uint8_t)(255 - phase)));
     }
 
     /* 上升段必须单调不减，否则呼吸会出现抖动。 */

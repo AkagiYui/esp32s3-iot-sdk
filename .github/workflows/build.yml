@@ -52,10 +52,13 @@ jobs:
           cmake --build build-host
           ctest --test-dir build-host --output-on-failure
 
+      # 装进独立 venv 并用绝对路径调用：runner 上 pipx 的 bin 目录位置并不固定
       - name: Check C formatting
         run: |
-          pipx install clang-format==20.1.7
-          clang-format --dry-run --Werror main/*.c main/*.h test/host/*.c test/host/*.h
+          python3 -m venv /tmp/clang-format-venv
+          /tmp/clang-format-venv/bin/pip install --quiet clang-format==20.1.7
+          /tmp/clang-format-venv/bin/clang-format --dry-run --Werror \
+            main/*.c main/*.h test/host/*.c test/host/*.h
 
   firmware:
     name: Build firmware and merged image
