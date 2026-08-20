@@ -11,6 +11,7 @@ idf_component_register(
         esp_hw_support
         esp_timer
         espressif__cjson
+        kenko_auth
         kenko_board
         kenko_core
         kenko_ota

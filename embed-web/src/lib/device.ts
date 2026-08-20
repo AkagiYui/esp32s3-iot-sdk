@@ -31,6 +31,7 @@ export type SystemInfo = {
     mac: string;
     state: string;
     provisioning: boolean;
+    password_configured: boolean;
   };
   chip: {
     model: string;
@@ -81,16 +82,6 @@ const POLL_MAX_INTERVAL_MS = 30000;
 
 export function fetchSystemInfo(): Promise<SystemInfo> {
   return apiRequest<SystemInfo>("/api/system/info");
-}
-
-/** 取当前的接口访问令牌（配网模式下无需鉴权即可读取）。 */
-export function fetchApiToken(): Promise<{ token: string }> {
-  return apiRequest<{ token: string }>("/api/system/token");
-}
-
-/** 重新生成令牌，旧令牌立即失效。 */
-export function rotateApiToken(): Promise<{ token: string }> {
-  return apiRequest<{ token: string }>("/api/system/token", { method: "POST" });
 }
 
 export function rebootDevice(): Promise<{ status: string }> {

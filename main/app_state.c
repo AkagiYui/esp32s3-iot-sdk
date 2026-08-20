@@ -11,6 +11,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "kenko_auth.h"
 #include "kenko_core.h"
 #include "mdns.h"
 #include "ota_service.h"
@@ -193,6 +194,7 @@ static void handle_factory_reset(void)
      * 重启后也不会再用旧凭据自动联网。 */
     wifi_config_store_clear();
     settings_store_reset();
+    kenko_auth_reset();
     if (storage_fs_storage_available()) {
         storage_fs_format_storage();
     }

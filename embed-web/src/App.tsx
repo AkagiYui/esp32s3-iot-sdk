@@ -1,13 +1,13 @@
-import { createEffect, ErrorBoundary, onCleanup, onMount, Show } from "solid-js";
+import { ErrorBoundary, onCleanup, onMount, Show } from "solid-js";
 import "./lib/theme";
 import ConnectionBanner from "./components/ConnectionBanner";
 import DialogHost from "./components/DialogHost";
 import NavBar from "./components/NavBar";
 import RouteView from "./components/RouteView";
 import ToastHost from "./components/ToastHost";
-import TokenGate from "./components/TokenGate";
-import { apiToken, setApiToken } from "./lib/auth";
-import { DEVICE_STATE_LABELS, fetchApiToken, subscribeDevice, systemInfo } from "./lib/device";
+import LoginGate from "./components/LoginGate";
+import { DEVICE_STATE_LABELS, subscribeDevice, systemInfo } from "./lib/device";
+import { refreshAuthStatus } from "./lib/session";
 import { cx } from "./lib/cx";
 import styles from "./App.module.css";
 
@@ -24,15 +24,9 @@ export default function App() {
     onCleanup(subscribeDevice());
   });
 
-  // 配网模式下接口不校验令牌，正好趁这个窗口把令牌取回来存下，
-  // 等设备切到局域网后用户就已经是授权状态了。
-  createEffect(() => {
-    if (!systemInfo()?.device.provisioning || apiToken()) {
-      return;
-    }
-    void fetchApiToken()
-      .then((result) => setApiToken(result.token))
-      .catch(() => undefined);
+  // 鉴权状态是未鉴权就能读的，界面靠它决定该显示"设置密码"还是"登录"。
+  onMount(() => {
+    void refreshAuthStatus();
   });
 
   const deviceName = () => systemInfo()?.device.name ?? "掌上设备控制台";
@@ -70,7 +64,7 @@ export default function App() {
         <NavBar />
       </div>
 
-      <TokenGate />
+      <LoginGate />
       <DialogHost />
       <ToastHost />
     </>

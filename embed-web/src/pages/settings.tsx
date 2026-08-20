@@ -3,12 +3,9 @@ import { createStore, reconcile } from "solid-js/store";
 import { Dynamic } from "solid-js/web";
 import {
   Clock,
-  Copy,
-  Eye,
-  EyeOff,
   KeyRound,
   Lightbulb,
-  RefreshCw,
+  LogOut,
   Monitor,
   Moon,
   Palette,
@@ -22,15 +19,8 @@ import Button from "@/components/Button";
 import Card from "@/components/Card";
 import InfoRow from "@/components/InfoRow";
 import { describeError } from "@/lib/api";
-import { apiToken, setApiToken } from "@/lib/auth";
-import {
-  factoryResetDevice,
-  fetchApiToken,
-  rebootDevice,
-  refreshSystemInfo,
-  rotateApiToken,
-  systemInfo,
-} from "@/lib/device";
+import { factoryResetDevice, rebootDevice, refreshSystemInfo, systemInfo } from "@/lib/device";
+import { authStatus, logout, setPassword } from "@/lib/session";
 import { showConfirm, showToast } from "@/lib/feedback";
 import {
   diffSettings,
@@ -69,8 +59,10 @@ export default function SettingsPage() {
   const [saved, setSaved] = createSignal<DeviceSettings | undefined>(undefined);
   const [loading, setLoading] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
-  const [tokenVisible, setTokenVisible] = createSignal(false);
-  const [rotating, setRotating] = createSignal(false);
+  const [currentPassword, setCurrentPassword] = createSignal("");
+  const [nextPassword, setNextPassword] = createSignal("");
+  const [confirmPassword, setConfirmPassword] = createSignal("");
+  const [changingPassword, setChangingPassword] = createSignal(false);
 
   const dirty = () => diffSettings(saved(), draft) !== undefined;
 
@@ -122,38 +114,37 @@ export default function SettingsPage() {
     }
   }
 
-  async function copyToken() {
-    try {
-      await navigator.clipboard.writeText(apiToken());
-      showToast("令牌已复制", "success");
-    } catch {
-      // 非安全上下文（http 直连 IP）下 clipboard 不可用，退化为让用户手动选中
-      setTokenVisible(true);
-      showToast("当前环境不允许自动复制，请手动选中", "warning");
-    }
-  }
+  const minPasswordLength = () => authStatus()?.password_min_length ?? 8;
+  /* 配网模式下不需要旧密码：那时用户是物理接近的，这也正是忘记密码后的找回途径。 */
+  const needsCurrentPassword = () => !systemInfo()?.device.provisioning;
 
-  async function rotateToken() {
-    const confirmed = await showConfirm(
-      "旧令牌会立即失效，其它已授权的浏览器需要重新输入新令牌。",
-      "重新生成令牌",
-      true,
-    );
-    if (confirmed !== "ok") {
+  async function changePassword() {
+    if (nextPassword() !== confirmPassword()) {
+      showToast("两次输入的新密码不一致", "warning");
+      return;
+    }
+    if (nextPassword().length < minPasswordLength()) {
+      showToast(`密码至少 ${minPasswordLength()} 位`, "warning");
       return;
     }
 
-    setRotating(true);
+    setChangingPassword(true);
     try {
-      const result = await rotateApiToken();
-      setApiToken(result.token);
-      setTokenVisible(true);
-      showToast("令牌已更新", "success");
+      await setPassword(nextPassword(), needsCurrentPassword() ? currentPassword() : undefined);
+      setCurrentPassword("");
+      setNextPassword("");
+      setConfirmPassword("");
+      showToast("访问密码已更新，其它设备上的登录已失效", "success");
     } catch (error) {
       showToast(describeError(error), "error");
     } finally {
-      setRotating(false);
+      setChangingPassword(false);
     }
+  }
+
+  async function signOut() {
+    await logout();
+    showToast("已退出登录", "info");
   }
 
   async function reboot() {
@@ -185,13 +176,7 @@ export default function SettingsPage() {
     }
   }
 
-  onMount(() => {
-    void load();
-    // 与设备上的令牌保持一致：本地存的可能是轮换前的旧值
-    void fetchApiToken()
-      .then((result) => setApiToken(result.token))
-      .catch(() => undefined);
-  });
+  onMount(() => void load());
 
   return (
     <div class="page">
@@ -257,38 +242,55 @@ export default function SettingsPage() {
         <InfoRow label="默认名称" value={systemInfo()?.device.default_name} mono tone="muted" />
       </Card>
 
-      <Card
-        icon={KeyRound}
-        title="访问令牌"
-        subtitle="设备接入局域网后，所有接口都需要它；配网模式下不校验"
-      >
-        <InfoRow label="令牌" hint="换浏览器访问时需要手动填入">
-          <span class={styles.token}>
-            {tokenVisible() ? apiToken() || "—" : "•".repeat(Math.min(apiToken().length, 16))}
-          </span>
+      <Card icon={KeyRound} title="访问密码" subtitle="设备接入局域网后用它登录；配网模式下不校验">
+        <Show when={needsCurrentPassword()}>
+          <InfoRow label="当前密码">
+            <input
+              class={styles.input}
+              type="password"
+              value={currentPassword()}
+              autocomplete="current-password"
+              onInput={(event) => setCurrentPassword(event.currentTarget.value)}
+            />
+          </InfoRow>
+        </Show>
+
+        <InfoRow label="新密码" hint={`至少 ${minPasswordLength()} 位`}>
+          <input
+            class={styles.input}
+            type="password"
+            value={nextPassword()}
+            autocomplete="new-password"
+            onInput={(event) => setNextPassword(event.currentTarget.value)}
+          />
         </InfoRow>
-        <div class={styles.tokenActions}>
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={tokenVisible() ? EyeOff : Eye}
-            onClick={() => setTokenVisible(!tokenVisible())}
-          >
-            {tokenVisible() ? "隐藏" : "显示"}
+
+        <InfoRow label="确认新密码">
+          <input
+            class={styles.input}
+            type="password"
+            value={confirmPassword()}
+            autocomplete="new-password"
+            onInput={(event) => setConfirmPassword(event.currentTarget.value)}
+          />
+        </InfoRow>
+
+        <Button
+          variant="secondary"
+          icon={KeyRound}
+          block
+          loading={changingPassword()}
+          disabled={!nextPassword() || !confirmPassword()}
+          onClick={() => void changePassword()}
+        >
+          更新访问密码
+        </Button>
+
+        <Show when={!systemInfo()?.device.provisioning}>
+          <Button variant="ghost" icon={LogOut} block onClick={() => void signOut()}>
+            退出登录
           </Button>
-          <Button variant="ghost" size="sm" icon={Copy} onClick={() => void copyToken()}>
-            复制
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={RefreshCw}
-            loading={rotating()}
-            onClick={() => void rotateToken()}
-          >
-            重新生成
-          </Button>
-        </div>
+        </Show>
       </Card>
 
       <Card icon={Clock} title="时间">

@@ -25,7 +25,7 @@
 - [x] BOOT 键长按进入配网（5s）或恢复出厂设置（10s）
 - [x] WS2812 状态灯指示当前系统状态，亮度可调
 - [x] 内置 Web 控制台：静态资源托管 + 完整 REST 接口
-- [x] 接口访问令牌：接入局域网后所有接口都需要鉴权
+- [x] 用户自设访问密码：接入局域网后所有接口都需要登录
 - [x] WiFi 配置的读写、扫描与即时连接
 - [x] 设备设置持久化（设备名、时区、NTP 开关、状态灯亮度）
 - [x] SNTP 时间同步与时区设置
@@ -83,6 +83,10 @@ REST 接口：
 
 | 接口 | 说明 |
 |------|------|
+| `GET /api/auth/status` | 是否已设密码、当前是否已登录（**无需鉴权**） |
+| `POST /api/auth/login` | 用访问密码换会话令牌（**无需鉴权**） |
+| `POST /api/auth/logout` | 注销当前会话 |
+| `PUT /api/auth/password` | 设置或修改访问密码 |
 | `GET /api/system/info` | 设备、芯片、固件、运行时、时间、网络、文件系统的完整快照 |
 | `POST /api/system/reboot` | 重启设备 |
 | `POST /api/system/factory-reset` | 清空全部配置并重启进入配网 |
@@ -91,7 +95,6 @@ REST 接口：
 | `POST /api/system/ota/confirm` | 确认当前镜像可用，取消回滚 |
 | `POST /api/system/revert-to-factory` | 下次启动切回出厂基线固件 |
 | `GET/DELETE /api/system/coredump` | 查询 / 擦除设备上保存的崩溃现场 |
-| `GET/POST /api/system/token` | 读取 / 重新生成接口访问令牌 |
 | `GET/PUT /api/settings` | 设备名、时区、NTP 开关、状态灯亮度 |
 | `GET /api/wifi/status` | 当前连接状态 |
 | `GET /api/wifi/scan` | 扫描附近热点（`?force=1` 跳过设备端缓存） |
@@ -101,26 +104,38 @@ REST 接口：
 
 错误一律返回 `{"error":{"code":"...","message":"..."}}`；未知的 `/api` 路径返回 `404` 而不是首页。
 
-### 访问令牌
+### 访问密码
 
-设备首次启动会生成一个 128 位随机令牌，存在配置分区里，并在串口日志中打印一次。
+设备没有屏幕也没有输入设备，**唯一能和人建立凭据的时刻就是配网门户**。
+所以流程是：配网时用户自己设一个访问密码，之后在局域网上用它登录。
 
-- **配网模式下不校验**：此时设备开着无密码热点，用户手上还没有令牌，物理接近就是这一阶段的信任边界。前端会趁这个窗口自动把令牌取回来存进浏览器。
-- **接入局域网后所有 `/api/**` 都要求令牌**，通过 `Authorization: Bearer <token>` 或 `X-API-Token` 传递，否则返回 `401`。
+- **配网模式下不校验**：此时设备开着无密码热点，物理接近就是这一阶段的信任边界。
+- **没设密码就不允许离开配网模式**：`POST /api/wifi/connect` 会返回 `409 password_not_set`。
+- **接入局域网后所有 `/api/**` 都需要会话令牌**，登录换取，通过 `Authorization: Bearer <token>` 传递。
 
 ```bash
-curl -H "Authorization: Bearer <token>" http://kenko32-xxxx.local/api/system/info
+TOKEN=$(curl -s -X POST http://kenko32-xxxx.local/api/auth/login \
+  -H 'Content-Type: application/json' -d '{"password":"你的密码"}' | jq -r .token)
+curl -H "Authorization: Bearer $TOKEN" http://kenko32-xxxx.local/api/system/info
 ```
 
-令牌丢了有三条找回路径：从已授权的浏览器里复制（设置页可查看/复制/轮换）、看串口日志、
-或长按 BOOT 键 5 秒回到配网模式重新领取。
+设备只保存 PBKDF2-HMAC-SHA256（默认 20000 轮）的派生值与随机盐，不保存密码本身；
+连续登录失败会按次数线性拉长锁定时间，用来拖垮在线爆破。
+会话令牌只存在内存里，设备重启后需要重新登录。
 
-> 鉴权不等于加密。设备用的是明文 HTTP，令牌在同一局域网内可被嗅探。
+**忘记密码**：长按 BOOT 键 5 秒回到配网模式，连上设备热点后直接重设，不需要旧密码。
+这条路径要求物理接触设备，正是它该有的门槛。
+
+> 为什么不用随机令牌：换台手机就得手抄 32 位十六进制，而且配网页（`192.168.6.1`）
+> 和联网后的地址（`kenko32-xxxx.local`）是**不同的 origin**，localStorage 根本传不过去。
+> 用户自设的密码没有这个问题。
+
+> 鉴权不等于加密。设备用的是明文 HTTP，密码在同一局域网内可被嗅探。
 > 要防重放与窃听需要 HTTPS，而自签证书在嵌入式设备上的体验很差，本项目没有做。
 
 ### 固件签名（可选）
 
-鉴权挡住的是"未授权的人推固件"，挡不住"拿到令牌的人推恶意固件"。
+鉴权挡住的是"未授权的人推固件"，挡不住"拿到密码的人推恶意固件"。
 需要更强保证时可以开启镜像签名，OTA 时校验 RSA-3072 签名：
 
 ```bash
@@ -251,6 +266,7 @@ vp -C embed-web check && vp -C embed-web test
 ```text
 components/
   kenko_core/       事件基与共享运行状态（所有组件的公共依赖）
+  kenko_auth/       访问密码的派生、校验与会话管理
   kenko_board/      设备身份、WS2812 状态灯、BOOT 键
   kenko_storage/    LittleFS 挂载与配置文件的原子读写
   kenko_settings/   设备设置与接口令牌的持久化
@@ -273,6 +289,7 @@ GPIO、端口、超时、任务栈与优先级、AP 地址、NTP 服务器等 40
 Kenko board      设备名前缀、WS2812 GPIO、按键 GPIO 与长按阈值
 Kenko storage    分区标签与挂载点
 Kenko settings   默认时区、默认亮度
+Kenko auth       密码最短长度、PBKDF2 轮数、会话数与有效期、登录锁定
 Kenko WiFi       AP 地址/信道、连接超时与退避、扫描缓存、省电模式、最大配置数
 Kenko time       NTP 服务器
 Kenko web server HTTP 端口、任务栈、请求体上限

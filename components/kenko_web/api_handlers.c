@@ -11,6 +11,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "kenko_auth.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "kenko_core.h"
@@ -316,6 +317,7 @@ static esp_err_t system_info_handler(httpd_req_t *req)
     cJSON_AddStringToObject(device, "mac", identity->mac);
     cJSON_AddStringToObject(device, "state", kenko_state_name(kenko_state_get()));
     cJSON_AddBoolToObject(device, "provisioning", kenko_state_is_provisioning());
+    cJSON_AddBoolToObject(device, "password_configured", kenko_auth_is_configured());
     cJSON_AddItemToObject(root, "device", device);
 
     cJSON *chip = cJSON_CreateObject();
@@ -381,11 +383,24 @@ static bool constant_time_equals(const char *left, const char *right, size_t len
     return diff == 0;
 }
 
+/** 从请求头里取出会话令牌，找不到返回 NULL。 */
+static const char *extract_session_token(httpd_req_t *req, char *buffer, size_t buffer_size)
+{
+    if (httpd_req_get_hdr_value_str(req, "Authorization", buffer, buffer_size) == ESP_OK &&
+        strncasecmp(buffer, "Bearer ", 7) == 0) {
+        return buffer + 7;
+    }
+    if (httpd_req_get_hdr_value_str(req, "X-Session-Token", buffer, buffer_size) == ESP_OK) {
+        return buffer;
+    }
+    return NULL;
+}
+
 /**
  * 判断请求是否被授权。
  *
- * 配网模式下不校验：此时设备开着无密码热点，用户手上还没有令牌，
- * 物理接近就是这一阶段的信任边界。一旦接入局域网，所有接口都要令牌。
+ * 配网模式下不校验：此时设备开着无密码热点，用户手上还没有凭据，
+ * 物理接近就是这一阶段的信任边界。一旦接入局域网，所有接口都要会话令牌。
  */
 static bool request_is_authorized(httpd_req_t *req)
 {
@@ -393,71 +408,169 @@ static bool request_is_authorized(httpd_req_t *req)
         return true;
     }
 
-    char expected[SETTINGS_API_TOKEN_LEN] = {0};
-    settings_store_get_api_token(expected, sizeof(expected));
-    size_t expected_len = strnlen(expected, sizeof(expected));
-    if (expected_len == 0) {
-        /* 没有令牌就不拦，否则配置分区异常时会把用户彻底锁在外面。 */
-        ESP_LOGW(TAG, "no api token available, allowing request");
+    if (!kenko_auth_is_configured()) {
+        /* 口令没设起来就不拦，否则配置分区异常时会把用户彻底锁在外面。
+         * 正常路径上设备不会走到这里：没设口令根本不允许离开配网模式。 */
+        ESP_LOGW(TAG, "access password is not configured, allowing request");
         return true;
     }
 
     char header[128] = {0};
-    const char *presented = NULL;
-
-    if (httpd_req_get_hdr_value_str(req, "Authorization", header, sizeof(header)) == ESP_OK &&
-        strncasecmp(header, "Bearer ", 7) == 0) {
-        presented = header + 7;
-    }
-    if (presented == NULL &&
-        httpd_req_get_hdr_value_str(req, "X-API-Token", header, sizeof(header)) == ESP_OK) {
-        presented = header;
-    }
-    if (presented == NULL) {
-        return false;
-    }
-
-    if (strnlen(presented, sizeof(header)) != expected_len) {
-        return false;
-    }
-    return constant_time_equals(presented, expected, expected_len);
+    const char *token = extract_session_token(req, header, sizeof(header));
+    return token != NULL && kenko_auth_validate_session(token);
 }
 
 static esp_err_t send_unauthorized(httpd_req_t *req)
 {
     httpd_resp_set_hdr(req, "WWW-Authenticate", "Bearer realm=\"kenko\"");
-    return send_error(req, 401, "unauthorized", "a valid api token is required");
+    return send_error(req, 401, "unauthorized", "log in with the device access password");
 }
 
-/* ---------------- 系统操作接口 ---------------- */
+/* ---------------- 登录与口令 ---------------- */
 
-static esp_err_t system_token_handler(httpd_req_t *req)
+static esp_err_t send_session(httpd_req_t *req, const char *token, uint32_t expires_in)
 {
-    char token[SETTINGS_API_TOKEN_LEN] = {0};
-
-    switch (req->method) {
-    case HTTP_GET:
-    case HTTP_HEAD:
-        settings_store_get_api_token(token, sizeof(token));
-        break;
-    case HTTP_POST: {
-        esp_err_t err = settings_store_rotate_api_token(token, sizeof(token));
-        if (err != ESP_OK) {
-            return send_error(req, 500, "persist_failed", esp_err_to_name(err));
-        }
-        break;
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        return send_error(req, 500, "no_memory", "out of memory");
     }
-    default:
-        return send_method_not_allowed(req, "GET, HEAD, POST");
+    cJSON_AddStringToObject(root, "token", token);
+    cJSON_AddNumberToObject(root, "expires_in", expires_in);
+    return send_json(req, 200, root);
+}
+
+/** 未鉴权即可访问：前端要靠它判断该显示"设置口令"还是"登录"。 */
+static esp_err_t auth_status_handler(httpd_req_t *req)
+{
+    if (req->method != HTTP_GET && req->method != HTTP_HEAD) {
+        return send_method_not_allowed(req, "GET, HEAD");
     }
 
     cJSON *root = cJSON_CreateObject();
     if (root == NULL) {
         return send_error(req, 500, "no_memory", "out of memory");
     }
-    cJSON_AddStringToObject(root, "token", token);
+
+    cJSON_AddBoolToObject(root, "configured", kenko_auth_is_configured());
+    cJSON_AddBoolToObject(root, "authenticated", request_is_authorized(req));
+    cJSON_AddBoolToObject(root, "provisioning", kenko_state_is_provisioning());
+    cJSON_AddNumberToObject(root, "password_min_length", KENKO_AUTH_PASSWORD_MIN_LEN);
     return send_json(req, 200, root);
 }
+
+static esp_err_t auth_login_handler(httpd_req_t *req)
+{
+    if (req->method != HTTP_POST) {
+        return send_method_not_allowed(req, "POST");
+    }
+
+    cJSON *root = NULL;
+    esp_err_t response = ESP_OK;
+    if (read_json_body(req, &root, &response) != ESP_OK) {
+        return response;
+    }
+
+    const cJSON *password = cJSON_GetObjectItemCaseSensitive(root, "password");
+    if (!cJSON_IsString(password) || password->valuestring == NULL) {
+        cJSON_Delete(root);
+        return send_error(req, 400, "invalid_body", "password is required");
+    }
+
+    char token[KENKO_AUTH_TOKEN_LEN] = {0};
+    uint32_t expires_in = 0;
+    esp_err_t err = kenko_auth_login(password->valuestring, token, sizeof(token), &expires_in);
+    cJSON_Delete(root);
+
+    if (err == ESP_ERR_INVALID_STATE) {
+        return send_error(req, 409, "password_not_set", "no access password has been set yet");
+    }
+    if (err == ESP_ERR_NOT_ALLOWED) {
+        httpd_resp_set_hdr(req, "Retry-After", "1");
+        return send_error(req, 429, "too_many_attempts", "too many failed attempts, try again shortly");
+    }
+    if (err != ESP_OK) {
+        return send_error(req, 401, "invalid_password", "wrong access password");
+    }
+
+    return send_session(req, token, expires_in);
+}
+
+static esp_err_t auth_logout_handler(httpd_req_t *req)
+{
+    if (req->method != HTTP_POST) {
+        return send_method_not_allowed(req, "POST");
+    }
+
+    char header[128] = {0};
+    const char *token = extract_session_token(req, header, sizeof(header));
+    kenko_auth_logout(token);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "status", "logged_out");
+    return send_json(req, 200, root);
+}
+
+static esp_err_t auth_password_handler(httpd_req_t *req)
+{
+    if (req->method != HTTP_PUT && req->method != HTTP_POST) {
+        return send_method_not_allowed(req, "POST, PUT");
+    }
+
+    if (!storage_fs_storage_available()) {
+        return send_error(req, 503, "storage_unavailable", "config partition is not mounted");
+    }
+
+    cJSON *root = NULL;
+    esp_err_t response = ESP_OK;
+    if (read_json_body(req, &root, &response) != ESP_OK) {
+        return response;
+    }
+
+    const cJSON *next = cJSON_GetObjectItemCaseSensitive(root, "password");
+    const cJSON *current = cJSON_GetObjectItemCaseSensitive(root, "current_password");
+
+    if (!cJSON_IsString(next) || next->valuestring == NULL) {
+        cJSON_Delete(root);
+        return send_error(req, 400, "invalid_body", "password is required");
+    }
+
+    const char *reason = NULL;
+    if (!kenko_auth_check_policy(next->valuestring, &reason)) {
+        cJSON_Delete(root);
+        return send_error(req, 400, "weak_password", reason);
+    }
+
+    /*
+     * 配网模式下不要求旧口令：那时用户是物理接近的，而且这正是忘记口令后的
+     * 找回途径——长按 BOOT 5 秒回到配网模式，重设一个新的。
+     */
+    const char *current_value = NULL;
+    if (!kenko_state_is_provisioning() && kenko_auth_is_configured()) {
+        if (!cJSON_IsString(current) || current->valuestring == NULL) {
+            cJSON_Delete(root);
+            return send_error(req, 400, "current_password_required",
+                              "the current password is required to change it");
+        }
+        current_value = current->valuestring;
+    }
+
+    char token[KENKO_AUTH_TOKEN_LEN] = {0};
+    uint32_t expires_in = 0;
+    esp_err_t err =
+        kenko_auth_set_password(current_value, next->valuestring, token, sizeof(token), &expires_in);
+    cJSON_Delete(root);
+
+    if (err == ESP_ERR_INVALID_ARG) {
+        return send_error(req, 401, "invalid_password", "the current password does not match");
+    }
+    if (err != ESP_OK) {
+        return send_error(req, 500, "persist_failed", esp_err_to_name(err));
+    }
+
+    return send_session(req, token, expires_in);
+}
+
+/* ---------------- 系统操作接口 ---------------- */
 
 static esp_err_t system_reboot_handler(httpd_req_t *req)
 {
@@ -917,6 +1030,14 @@ static esp_err_t wifi_connect_handler(httpd_req_t *req)
         return send_error(req, 409, "no_wifi_config", "no wifi credentials saved");
     }
 
+    /*
+     * 没设访问口令就不许离开配网模式。配网门户是这块板子唯一能和人交互的时刻，
+     * 一旦接入局域网就再没有建立凭据的安全通道了。
+     */
+    if (!kenko_auth_is_configured()) {
+        return send_error(req, 409, "password_not_set", "set an access password before joining a network");
+    }
+
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "status", "connecting");
     cJSON_AddStringToObject(root, "note", "the provisioning hotspot will shut down");
@@ -978,26 +1099,31 @@ typedef esp_err_t (*api_handler_fn)(httpd_req_t *req);
 typedef struct {
     const char *uri;
     api_handler_fn handler;
+    /** 登录本身和"是否需要登录"的探测必须能在未鉴权时访问，否则无法自举。 */
+    bool allow_unauthenticated;
 } api_route_t;
 
 /* 顺序即匹配顺序：具体路径必须排在通配兜底之前。 */
 static const api_route_t k_routes[] = {
-    {"/api/system/info", system_info_handler},
-    {"/api/system/reboot", system_reboot_handler},
-    {"/api/system/factory-reset", system_factory_reset_handler},
-    {"/api/system/ota/confirm", system_ota_confirm_handler},
-    {"/api/system/ota", system_ota_handler},
-    {"/api/system/revert-to-factory", system_revert_factory_handler},
-    {"/api/system/coredump", system_coredump_handler},
-    {"/api/system/token", system_token_handler},
-    {"/api/settings", settings_handler},
-    {"/api/wifi/status", wifi_status_handler},
-    {"/api/wifi/scan", wifi_scan_handler},
-    {"/api/wifi/config", wifi_config_handler},
-    {"/api/wifi/connect", wifi_connect_handler},
-    {"/api/wifi/provision", wifi_provision_handler},
-    {"/api", api_not_found_handler},
-    {"/api/*", api_not_found_handler},
+    {"/api/auth/status", auth_status_handler, true},
+    {"/api/auth/login", auth_login_handler, true},
+    {"/api/auth/logout", auth_logout_handler, false},
+    {"/api/auth/password", auth_password_handler, false},
+    {"/api/system/info", system_info_handler, false},
+    {"/api/system/reboot", system_reboot_handler, false},
+    {"/api/system/factory-reset", system_factory_reset_handler, false},
+    {"/api/system/ota/confirm", system_ota_confirm_handler, false},
+    {"/api/system/ota", system_ota_handler, false},
+    {"/api/system/revert-to-factory", system_revert_factory_handler, false},
+    {"/api/system/coredump", system_coredump_handler, false},
+    {"/api/settings", settings_handler, false},
+    {"/api/wifi/status", wifi_status_handler, false},
+    {"/api/wifi/scan", wifi_scan_handler, false},
+    {"/api/wifi/config", wifi_config_handler, false},
+    {"/api/wifi/connect", wifi_connect_handler, false},
+    {"/api/wifi/provision", wifi_provision_handler, false},
+    {"/api", api_not_found_handler, false},
+    {"/api/*", api_not_found_handler, false},
 };
 
 /**
@@ -1013,7 +1139,7 @@ static esp_err_t api_dispatch(httpd_req_t *req)
         return send_error(req, 500, "internal", "route not bound");
     }
 
-    if (!request_is_authorized(req)) {
+    if (!route->allow_unauthenticated && !request_is_authorized(req)) {
         ESP_LOGW(TAG, "rejected unauthorized %s", route->uri);
         return send_unauthorized(req);
     }

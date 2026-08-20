@@ -172,6 +172,10 @@ src/
 
 | 接口                                 | 用途                                                     |
 | ------------------------------------ | -------------------------------------------------------- |
+| `GET /api/auth/status`               | 是否已设密码 / 是否已登录（无需鉴权）                    |
+| `POST /api/auth/login`               | 用访问密码换会话令牌（无需鉴权）                         |
+| `POST /api/auth/logout`              | 注销当前会话                                             |
+| `PUT /api/auth/password`             | 设置或修改访问密码                                       |
 | `GET /api/system/info`               | 设备、芯片、固件、运行时、时间、网络、文件系统的完整快照 |
 | `POST /api/system/reboot`            | 重启设备                                                 |
 | `POST /api/system/factory-reset`     | 清空配置并重启                                           |
@@ -179,7 +183,6 @@ src/
 | `POST /api/system/ota/confirm`       | 确认当前镜像，取消回滚                                   |
 | `POST /api/system/revert-to-factory` | 下次启动切回出厂基线固件                                 |
 | `GET/DELETE /api/system/coredump`    | 查询 / 擦除设备上保存的崩溃现场                          |
-| `GET/POST /api/system/token`         | 读取 / 重新生成接口访问令牌                              |
 | `GET/PUT /api/settings`              | 设备名、时区、NTP 开关、状态灯亮度                       |
 | `GET /api/wifi/status`               | 当前连接状态                                             |
 | `GET /api/wifi/scan`                 | 扫描附近热点（`?force=1` 跳过设备端缓存）                |
@@ -189,9 +192,11 @@ src/
 
 三条必须遵守的约定：
 
-- **设备接入局域网后所有接口都需要令牌**，`lib/api.ts` 会自动带上
-  `Authorization: Bearer`；收到 `401` 时切到 `TokenGate` 闸门，而不是刷一屏请求失败。
-  配网模式下接口不校验，前端会趁这个窗口把令牌取回来存进 localStorage。
+- **设备接入局域网后所有接口都需要登录**，`lib/api.ts` 会自动带上
+  `Authorization: Bearer`；收到 `401` 时切到 `LoginGate` 闸门，而不是刷一屏请求失败。
+  唯独登录与改密两个接口要传 `onUnauthorized: "throw"`——那里的 `401` 是"密码错了"，
+  不是"你还没登录"，糊成一个提示会让用户完全摸不着头脑。
+  配网模式下接口不校验，WiFi 页会要求用户先设好访问密码才允许连接。
 
 - **设备永远不会回传明文 WiFi 密码**，`GET /api/wifi/config` 只给 `has_password`。
   因此前端把"未改动的密码"表示为 `null`，`PUT` 时原样送回，由设备沿用已保存的那一份。

@@ -52,7 +52,6 @@
   border-radius: 12px;
   background: var(--surface);
   color: var(--text-h);
-  font-family: var(--mono);
   font-size: 14px;
   text-align: center;
 }
@@ -72,4 +71,13 @@
   .overlay {
     animation: none;
   }
+}
+
+.error {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+  font-size: 13px;
+  text-align: left;
 }

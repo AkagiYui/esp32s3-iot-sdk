@@ -4,6 +4,7 @@
 #include "esp_err.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "kenko_auth.h"
 #include "kenko_core.h"
 #include "nvs_flash.h"
 #include "ota_service.h"
@@ -46,6 +47,7 @@ void app_main(void)
 
     const device_identity_t *identity = device_info_identity();
     ESP_ERROR_CHECK(settings_store_init(identity->default_name));
+    ESP_ERROR_CHECK(kenko_auth_init());
 
     app_settings_t settings;
     settings_store_get(&settings);

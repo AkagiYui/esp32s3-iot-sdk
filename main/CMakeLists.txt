@@ -7,6 +7,7 @@ idf_component_register(
     PRIV_REQUIRES
         esp_event
         espressif__mdns
+        kenko_auth
         kenko_board
         kenko_core
         kenko_ota

@@ -9,6 +9,7 @@ import {
   Save,
   Trash2,
   Wifi as WifiIcon,
+  KeyRound,
 } from "lucide-solid";
 import Button from "@/components/Button";
 import Card from "@/components/Card";
@@ -17,6 +18,7 @@ import WifiScanModal from "@/components/WifiScanModal";
 import { describeError } from "@/lib/api";
 import { refreshSystemInfo, systemInfo } from "@/lib/device";
 import { showConfirm, showToast } from "@/lib/feedback";
+import { authStatus, setPassword } from "@/lib/session";
 import { signalLevel } from "@/lib/format";
 import {
   applyWifiConfig,
@@ -53,6 +55,38 @@ export default function WifiPage() {
 
   const passwordInputs = new Map<string, HTMLInputElement>();
   const wifi = () => systemInfo()?.wifi;
+
+  const [accessPassword, setAccessPassword] = createSignal("");
+  const [accessConfirm, setAccessConfirm] = createSignal("");
+  const [savingAccess, setSavingAccess] = createSignal(false);
+  const minPasswordLength = () => authStatus()?.password_min_length ?? 8;
+  /* 设备没设访问密码就不允许离开配网模式：配网门户是这块板子唯一能和人
+   * 建立凭据的时刻，一旦接入局域网就没有安全通道了。 */
+  const passwordConfigured = () => authStatus()?.configured !== false;
+
+  async function saveAccessPassword() {
+    if (accessPassword() !== accessConfirm()) {
+      showToast("两次输入的密码不一致", "warning");
+      return;
+    }
+    if (accessPassword().length < minPasswordLength()) {
+      showToast(`密码至少 ${minPasswordLength()} 位`, "warning");
+      return;
+    }
+
+    setSavingAccess(true);
+    try {
+      await setPassword(accessPassword());
+      setAccessPassword("");
+      setAccessConfirm("");
+      showToast("访问密码已设置", "success");
+      void refreshSystemInfo();
+    } catch (error) {
+      showToast(describeError(error), "error");
+    } finally {
+      setSavingAccess(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -210,6 +244,43 @@ export default function WifiPage() {
         <p class="subtitle">按列表顺序依次尝试连接</p>
       </div>
 
+      <Show when={!passwordConfigured()}>
+        <Card
+          icon={KeyRound}
+          title="先设置访问密码"
+          subtitle="设备接入局域网后就没有安全通道再建立凭据了，所以必须在这一步设好"
+        >
+          <InfoRow label="访问密码" hint={`至少 ${minPasswordLength()} 位`}>
+            <input
+              class={styles.accessInput}
+              type="password"
+              value={accessPassword()}
+              autocomplete="new-password"
+              onInput={(event) => setAccessPassword(event.currentTarget.value)}
+            />
+          </InfoRow>
+          <InfoRow label="确认密码">
+            <input
+              class={styles.accessInput}
+              type="password"
+              value={accessConfirm()}
+              autocomplete="new-password"
+              onInput={(event) => setAccessConfirm(event.currentTarget.value)}
+            />
+          </InfoRow>
+          <Button
+            variant="primary"
+            icon={KeyRound}
+            block
+            loading={savingAccess()}
+            disabled={!accessPassword() || !accessConfirm()}
+            onClick={() => void saveAccessPassword()}
+          >
+            设置访问密码
+          </Button>
+        </Card>
+      </Show>
+
       <Card icon={WifiIcon} title="当前连接">
         <Show
           when={wifi()?.connected}
@@ -233,10 +304,10 @@ export default function WifiPage() {
           icon={WifiIcon}
           block
           loading={connecting()}
-          disabled={configs.length === 0}
+          disabled={configs.length === 0 || !passwordConfigured()}
           onClick={() => void connect()}
         >
-          用已保存的配置连接
+          {passwordConfigured() ? "用已保存的配置连接" : "请先设置访问密码"}
         </Button>
       </Card>
 

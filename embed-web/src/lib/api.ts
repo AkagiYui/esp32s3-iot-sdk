@@ -5,7 +5,7 @@
  * 所以每个请求都必须有超时和结构化的错误，绝不能让界面无限转圈。
  */
 
-import { apiToken, setAuthRequired } from "./auth";
+import { sessionToken, setAuthRequired } from "./auth";
 
 export const API_TIMEOUT_MS = 8000;
 
@@ -38,6 +38,13 @@ export type RequestOptions = {
   body?: unknown;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /**
+   * 收到 401 时的处理方式。
+   *
+   * 默认 "gate"：把界面切到登录闸门。登录接口本身必须用 "throw"，
+   * 否则"密码错了"会被当成"你还没登录"，用户看到的提示牛头不对马嘴。
+   */
+  onUnauthorized?: "gate" | "throw";
 };
 
 function combineSignals(timeoutMs: number, external?: AbortSignal): [AbortSignal, () => void] {
@@ -76,14 +83,20 @@ async function readError(response: Response): Promise<ApiError> {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, timeoutMs = API_TIMEOUT_MS, signal: external } = options;
+  const {
+    method = "GET",
+    body,
+    timeoutMs = API_TIMEOUT_MS,
+    signal: external,
+    onUnauthorized = "gate",
+  } = options;
   const [signal, cleanup] = combineSignals(timeoutMs, external);
 
   const headers: Record<string, string> = {};
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
-  const token = apiToken();
+  const token = sessionToken();
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
@@ -110,14 +123,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
   cleanup();
 
-  if (response.status === 401) {
-    // 令牌缺失或失效：把界面切到"请输入令牌"，而不是反复弹一堆请求失败
-    setAuthRequired(true);
-    throw new ApiError("需要访问令牌", 401, "unauthorized");
-  }
-
   if (!response.ok) {
-    throw await readError(response);
+    const error = await readError(response);
+    // 会话缺失或过期：把界面切到登录闸门，而不是反复弹一堆请求失败。
+    // 但错误本身要原样抛出，调用方才能显示设备给出的具体原因。
+    if (response.status === 401 && onUnauthorized === "gate") {
+      setAuthRequired(true);
+    }
+    throw error;
   }
 
   if (response.status === 204) {
@@ -131,10 +144,40 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 }
 
+/**
+ * 设备返回的错误信息是英文的（固件里塞中文既占 flash 又容易编码出错），
+ * 这里按错误码翻成中文。没收录的码就退回设备给的原文，至少不会更糟。
+ */
+const ERROR_MESSAGES: Record<string, string> = {
+  unauthorized: "需要登录",
+  invalid_password: "密码不正确",
+  current_password_required: "请填写当前密码",
+  weak_password: "密码太短或包含不可见字符",
+  password_not_set: "设备还没有设置访问密码",
+  too_many_attempts: "尝试次数过多，请稍后再试",
+  storage_unavailable: "配置分区不可用，无法保存",
+  no_wifi_config: "还没有保存任何 WiFi 配置",
+  invalid_ssid: "SSID 不合法",
+  too_many_items: "WiFi 配置数量超出上限",
+  scan_failed: "扫描失败，请稍后重试",
+  body_too_large: "请求内容过大",
+  invalid_json: "请求格式不正确",
+  ota_busy: "已有一个升级正在进行",
+  image_too_large: "固件超出 OTA 分区容量",
+  image_rejected: "固件校验未通过",
+  upload_interrupted: "上传过程中断开",
+  no_factory_partition: "当前分区表没有出厂基线镜像",
+  factory_image_invalid: "出厂基线镜像校验失败",
+  persist_failed: "写入失败",
+  no_memory: "设备内存不足",
+  not_found: "接口不存在",
+  method_not_allowed: "该接口不支持这个操作",
+};
+
 /** 把任意异常转成可以直接展示给用户的一句话。 */
 export function describeError(error: unknown): string {
   if (error instanceof ApiError) {
-    return error.message;
+    return ERROR_MESSAGES[error.code] ?? error.message;
   }
   if (error instanceof Error) {
     return error.message;

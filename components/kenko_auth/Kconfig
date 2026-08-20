@@ -1,0 +1,39 @@
+menu "Kenko auth"
+
+    config KENKO_AUTH_PASSWORD_MIN_LEN
+        int "Minimum access password length"
+        range 6 32
+        default 8
+
+    config KENKO_AUTH_PBKDF2_ITERATIONS
+        int "PBKDF2 iterations"
+        range 1000 200000
+        default 20000
+        help
+            越大越难被离线爆破，代价是每次登录都要算这么多轮。
+            ESP32-S3 有 SHA 硬件加速，20000 轮大约几百毫秒。
+
+    config KENKO_AUTH_MAX_SESSIONS
+        int "Maximum concurrent sessions"
+        range 1 16
+        default 4
+
+    config KENKO_AUTH_SESSION_TTL_HOURS
+        int "Session lifetime (hours)"
+        default 168
+
+    config KENKO_AUTH_LOCKOUT_STEP_MS
+        int "Login lockout step per failed attempt (ms)"
+        default 500
+        help
+            连续失败会按次数线性拉长锁定时间，用来拖垮在线爆破。
+
+    config KENKO_AUTH_LOCKOUT_MAX_MS
+        int "Maximum login lockout (ms)"
+        default 30000
+
+    config KENKO_AUTH_FILE_NAME
+        string "Credential file name"
+        default "auth.json"
+
+endmenu

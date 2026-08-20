@@ -50,8 +50,10 @@ export function devApiMock(): Plugin {
     led_brightness: 100,
   };
 
-  // 与固件一致：配网模式下不校验令牌，接入局域网后所有接口都要令牌。
-  let apiTokenValue = "devtoken00000000000000000000dead";
+  // 与固件一致：配网模式下不校验，接入局域网后所有接口都要登录换来的会话令牌。
+  const PASSWORD_MIN_LENGTH = 8;
+  let accessPassword = "kenko1234";
+  let sessions: string[] = [];
   let provisioning = false;
   let connected = true;
   let otaState: "idle" | "receiving" | "ready" | "failed" = "idle";
@@ -80,6 +82,7 @@ export function devApiMock(): Plugin {
       mac: "a0:b7:65:ab:12:34",
       state: provisioning ? "provisioning" : connected ? "online" : "connecting",
       provisioning,
+      password_configured: accessPassword.length > 0,
     },
     chip: {
       model: "ESP32-S3",
@@ -155,7 +158,7 @@ export function devApiMock(): Plugin {
     apply: "serve",
 
     configureServer(server) {
-      server.config.logger.info(`[dev-api-mock] api token: ${apiTokenValue}`);
+      server.config.logger.info(`[dev-api-mock] 访问密码: ${accessPassword}`);
 
       server.middlewares.use("/api", (req, res, next) => {
         const path = req.url?.split("?")[0] ?? "";
@@ -170,25 +173,82 @@ export function devApiMock(): Plugin {
         const fail = (status: number, code: string, message: string) =>
           json({ error: { code, message } }, status);
 
-        if (!provisioning) {
+        const presentedToken = (() => {
           const header = req.headers.authorization ?? "";
-          const presented = header.toLowerCase().startsWith("bearer ")
-            ? header.slice(7)
-            : ((req.headers["x-api-token"] as string | undefined) ?? "");
-          if (presented !== apiTokenValue) {
-            res.setHeader("WWW-Authenticate", 'Bearer realm="kenko"');
-            fail(401, "unauthorized", "a valid api token is required");
-            return;
+          if (header.toLowerCase().startsWith("bearer ")) {
+            return header.slice(7);
           }
+          return (req.headers["x-session-token"] as string | undefined) ?? "";
+        })();
+        const authorized = provisioning || sessions.includes(presentedToken);
+        const issueSession = () => {
+          const token = Math.random().toString(16).slice(2).padEnd(32, "0").slice(0, 32);
+          sessions = [...sessions.slice(-3), token];
+          return { token, expires_in: 604800 };
+        };
+
+        // 登录与状态探测必须能在未鉴权时访问，否则无法自举
+        if (path === "/auth/status" && method === "GET") {
+          json({
+            configured: accessPassword.length > 0,
+            authenticated: authorized,
+            provisioning,
+            password_min_length: PASSWORD_MIN_LENGTH,
+          });
+          return;
         }
 
-        if (path === "/system/token" && (method === "GET" || method === "POST")) {
-          if (method === "POST") {
-            apiTokenValue = Array.from({ length: 32 }, (_, index) =>
-              "0123456789abcdef".charAt((index * 7 + Date.now()) % 16),
-            ).join("");
-          }
-          json({ token: apiTokenValue });
+        if (path === "/auth/login" && method === "POST") {
+          void readBody(req).then((body) => {
+            try {
+              const payload = JSON.parse(body) as { password?: string };
+              if (!accessPassword) {
+                fail(409, "password_not_set", "no access password has been set yet");
+              } else if (payload.password === accessPassword) {
+                json(issueSession());
+              } else {
+                fail(401, "invalid_password", "wrong access password");
+              }
+            } catch {
+              fail(400, "invalid_json", "request body is not valid json");
+            }
+          });
+          return;
+        }
+
+        if (!authorized) {
+          res.setHeader("WWW-Authenticate", 'Bearer realm="kenko"');
+          fail(401, "unauthorized", "log in with the device access password");
+          return;
+        }
+
+        if (path === "/auth/logout" && method === "POST") {
+          sessions = sessions.filter((token) => token !== presentedToken);
+          json({ status: "logged_out" });
+          return;
+        }
+
+        if (path === "/auth/password" && (method === "PUT" || method === "POST")) {
+          void readBody(req).then((body) => {
+            try {
+              const payload = JSON.parse(body) as { password?: string; current_password?: string };
+              const next = payload.password ?? "";
+              if (next.length < PASSWORD_MIN_LENGTH) {
+                fail(400, "weak_password", "password is too short");
+                return;
+              }
+              if (!provisioning && accessPassword && payload.current_password !== accessPassword) {
+                fail(401, "invalid_password", "the current password does not match");
+                return;
+              }
+              accessPassword = next;
+              sessions = [];
+              server.config.logger.info(`[dev-api-mock] 访问密码已更新: ${accessPassword}`);
+              json(issueSession());
+            } catch {
+              fail(400, "invalid_json", "request body is not valid json");
+            }
+          });
           return;
         }
 
@@ -204,6 +264,8 @@ export function devApiMock(): Plugin {
 
         if (path === "/system/factory-reset" && method === "POST") {
           credentials = [];
+          accessPassword = "";
+          sessions = [];
           provisioning = true;
           connected = false;
           json({ status: "resetting" }, 202);
@@ -312,6 +374,10 @@ export function devApiMock(): Plugin {
         }
 
         if (path === "/wifi/connect" && method === "POST") {
+          if (!accessPassword) {
+            fail(409, "password_not_set", "set an access password before joining a network");
+            return;
+          }
           provisioning = false;
           connected = true;
           json({ status: "connecting" }, 202);

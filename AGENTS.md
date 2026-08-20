@@ -38,6 +38,7 @@ curl -fsSL https://vite.plus | bash
 - 功能实现全部在 `components/kenko_*` 下，`main/` 只保留启动序列与状态机。组件之间通过 `kenko_core` 的事件基通信，不允许组件反向依赖 `main/`。
 - 与 ESP-IDF 解耦的纯逻辑模块（`kenko_board/led_color.c`、`kenko_wifi/dns_message.c`、`kenko_web/http_utils.c`）必须保持可在 host 上编译，改动时同步更新 `test/host/`。
 - 可调参数一律走 Kconfig（`CONFIG_KENKO_*`），不要在源码里写死。
+- 设备访问凭据是用户在配网时自设的密码（`kenko_auth`），设备只存 PBKDF2 派生值。配网模式免鉴权，其余一律要会话令牌。
 - host 测试默认开 ASan/UBSan（`-DKENKO_SANITIZE=OFF` 可关）。`test_fuzz` 用固定种子的随机输入压两个解析器，失败可复现。
 - 固件体积有基线（`tools/size-baseline.json`），涨超 3% 或占满 OTA 槽位 75% 会失败。
 - 提交信息使用 Conventional Commits。

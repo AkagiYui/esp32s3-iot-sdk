@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { ApiError, apiRequest, describeError } from "./api";
-import { authRequired, setApiToken, setAuthRequired } from "./auth";
+import { authRequired, setAuthRequired, setSessionToken } from "./auth";
 
 const fetchMock = vi.fn();
 
@@ -18,13 +18,13 @@ describe("apiRequest", () => {
   beforeEach(() => {
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
-    setApiToken("");
+    setSessionToken("");
     setAuthRequired(false);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    setApiToken("");
+    setSessionToken("");
     setAuthRequired(false);
   });
 
@@ -40,8 +40,8 @@ describe("apiRequest", () => {
     expect(init.headers).toEqual({});
   });
 
-  it("有令牌时带上 Authorization 头", async () => {
-    setApiToken("deadbeef");
+  it("有会话令牌时带上 Authorization 头", async () => {
+    setSessionToken("deadbeef");
     fetchMock.mockResolvedValue(response({}));
 
     await apiRequest("/api/system/info");
@@ -50,8 +50,8 @@ describe("apiRequest", () => {
     expect(init.headers).toEqual({ Authorization: "Bearer deadbeef" });
   });
 
-  it("带 body 且有令牌时两个头都在", async () => {
-    setApiToken("deadbeef");
+  it("带 body 且有会话令牌时两个头都在", async () => {
+    setSessionToken("deadbeef");
     fetchMock.mockResolvedValue(response({}));
 
     await apiRequest("/api/settings", { method: "PUT", body: { a: 1 } });
@@ -63,14 +63,43 @@ describe("apiRequest", () => {
     });
   });
 
-  it("401 会切到需要令牌的状态，而不是当成普通错误", async () => {
-    fetchMock.mockResolvedValue(response({}, { ok: false, status: 401 }));
+  it("401 默认切到需要登录的状态，同时原样抛出设备给的原因", async () => {
+    fetchMock.mockResolvedValue(
+      response(
+        { error: { code: "unauthorized", message: "log in first" } },
+        {
+          ok: false,
+          status: 401,
+        },
+      ),
+    );
 
     await expect(apiRequest("/api/system/info")).rejects.toMatchObject({
       status: 401,
       code: "unauthorized",
+      message: "log in first",
     });
     expect(authRequired()).toBe(true);
+  });
+
+  it("登录接口上的 401 不该切闸门——那是密码错了，不是没登录", async () => {
+    fetchMock.mockResolvedValue(
+      response(
+        { error: { code: "invalid_password", message: "wrong access password" } },
+        {
+          ok: false,
+          status: 401,
+        },
+      ),
+    );
+
+    await expect(
+      apiRequest("/api/auth/login", { method: "POST", onUnauthorized: "throw" }),
+    ).rejects.toMatchObject({
+      code: "invalid_password",
+      message: "wrong access password",
+    });
+    expect(authRequired()).toBe(false);
   });
 
   it("带 body 时序列化为 JSON 并设置 Content-Type", async () => {
@@ -179,8 +208,17 @@ describe("apiRequest", () => {
 });
 
 describe("describeError", () => {
-  it("ApiError 直接用它的信息", () => {
+  it("已知错误码翻成中文，而不是把设备的英文原样丢给用户", () => {
+    expect(describeError(new ApiError("wrong access password", 401, "invalid_password"))).toBe(
+      "密码不正确",
+    );
+  });
+
+  it("没收录的错误码退回设备给的原文", () => {
     expect(describeError(new ApiError("设备无响应", 0, "timeout"))).toBe("设备无响应");
+    expect(describeError(new ApiError("something odd", 500, "brand_new_code"))).toBe(
+      "something odd",
+    );
   });
 
   it("普通 Error 用 message", () => {

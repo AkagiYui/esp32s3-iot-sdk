@@ -178,3 +178,18 @@
     transition: none;
   }
 }
+
+.accessInput {
+  width: min(200px, 48vw);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  color: var(--text-h);
+  font-size: 14px;
+}
+
+.accessInput:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
