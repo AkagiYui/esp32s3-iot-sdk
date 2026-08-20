@@ -10,11 +10,22 @@ export type OtaStatus = {
   running_partition: string;
   boot_partition: string;
   awaiting_confirm: boolean;
+  factory_available: boolean;
   max_image_size: number;
 };
 
 export function fetchOtaStatus(): Promise<OtaStatus> {
   return apiRequest<OtaStatus>("/api/system/ota");
+}
+
+/**
+ * 回退到出厂基线固件。
+ *
+ * 与「恢复出厂设置」是两件事：那个清用户配置、不动固件；这个换下次启动的固件、
+ * 不动用户配置。设备会在响应发出后重启。
+ */
+export function revertToFactory(): Promise<{ status: string }> {
+  return apiRequest("/api/system/revert-to-factory", { method: "POST" });
 }
 
 export type CoredumpStatus = {

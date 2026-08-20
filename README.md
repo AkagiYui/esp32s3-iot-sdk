@@ -28,7 +28,8 @@
 - [x] WiFi 配置的读写、扫描与即时连接
 - [x] 设备设置持久化（设备名、时区、NTP 开关、状态灯亮度）
 - [x] SNTP 时间同步与时区设置
-- [x] OTA 升级：上传、镜像校验、双分区切换、失败自动回滚
+- [x] OTA 升级：上传、镜像校验、双槽位轮换、失败自动回滚
+- [x] 出厂基线固件（`factory` 分区），可一键回退，OTA 永不覆盖
 - [x] 重启与恢复出厂设置
 - [x] Coredump 落盘，Web 页面可查看与擦除，崩溃现场可事后分析
 - [ ] 蓝牙配网或设备控制
@@ -86,6 +87,7 @@ REST 接口：
 | `GET /api/system/ota` | 升级状态与 OTA 分区容量 |
 | `POST /api/system/ota` | 上传固件（请求体为原始 `.bin`） |
 | `POST /api/system/ota/confirm` | 确认当前镜像可用，取消回滚 |
+| `POST /api/system/revert-to-factory` | 下次启动切回出厂基线固件 |
 | `GET/DELETE /api/system/coredump` | 查询 / 擦除设备上保存的崩溃现场 |
 | `GET/PUT /api/settings` | 设备名、时区、NTP 开关、状态灯亮度 |
 | `GET /api/wifi/status` | 当前连接状态 |
@@ -101,20 +103,40 @@ REST 接口：
 
 ## 分区布局
 
-16MB Flash，双 OTA，无 factory 分区（首次烧录直接进 `ota_0`）：
+16MB Flash，一份出厂基线 + 两个 OTA 槽位：
 
-| 分区 | 类型 | 偏移 | 大小 |
-|------|------|------|------|
-| `nvs` | data/nvs | `0x9000` | 24 KB |
-| `otadata` | data/ota | `0xF000` | 8 KB |
-| `phy_init` | data/phy | `0x11000` | 4 KB |
-| `coredump` | data/coredump | `0x12000` | 64 KB |
-| `ota_0` | app | `0x30000` | 3 MB |
-| `ota_1` | app | `0x330000` | 3 MB |
-| `web` | data/littlefs | `0x630000` | 4 MB |
-| `storage` | data/littlefs | `0xA30000` | 5.8 MB |
+| 分区 | 类型 | 偏移 | 大小 | 用途 |
+|------|------|------|------|------|
+| `nvs` | data/nvs | `0x9000` | 24K | WiFi 驱动等系统数据 |
+| `otadata` | data/ota | `0xF000` | 8K | 记录下次从哪个 app 分区启动 |
+| `phy_init` | data/phy | `0x11000` | 4K | 射频校准数据 |
+| `coredump` | data/coredump | `0x12000` | 64K | 崩溃现场 |
+| `factory` | app | `0x30000` | 2M | 出厂基线固件，永远不会被 OTA 覆盖 |
+| `ota_0` | app | `0x230000` | 2M | OTA 槽位 A |
+| `ota_1` | app | `0x430000` | 2M | OTA 槽位 B |
+| `web` | data/littlefs | `0x630000` | 4M | 前端构建产物 |
+| `storage` | data/littlefs | `0xA30000` | 5952K | WiFi 配置与设备设置 |
 
-`web` 存放前端构建产物，`storage` 存放 WiFi 配置与设备设置。
+当前固件 924KB，2M 的槽位还有 56% 余量。`storage` 用尽 flash 尾部剩余空间，
+所以它的大小不是整数 M。
+
+### 三种"恢复"的区别
+
+这三件事名字接近但互不相同，别搞混：
+
+| 操作 | 触发方式 | 动固件？ | 动用户配置？ |
+|------|----------|----------|--------------|
+| **恢复出厂设置** | BOOT 键长按 10s / `POST /api/system/factory-reset` | 否 | 是，清空并格式化 `storage` |
+| **OTA 自动回滚** | 新固件启动后未被确认，下次重启自动发生 | 是，退回上一个槽位 | 否 |
+| **回退到出厂固件** | `POST /api/system/revert-to-factory` | 是，切回 `factory` | 否 |
+
+`factory` 分区的意义在于：`esp_ota_get_next_update_partition()` 只在 `ota_*` 之间轮转，
+所以它是一份**永远回得去的基线**。自动回滚只能退回上一个 OTA 版本，
+两个槽位都被刷坏时就只剩它了。
+
+> ESP-IDF 还有 bootloader 级的 GPIO 触发出厂重置（`CONFIG_BOOTLOADER_FACTORY_RESET`），
+> 但这块板子用不了：唯一的按键接在 GPIO 0，而 GPIO 0 复位时拉低是 ROM 下载模式的
+> strapping，二级 bootloader 根本轮不到执行。所以回退只做成了应用层的接口。
 
 ## 构建
 

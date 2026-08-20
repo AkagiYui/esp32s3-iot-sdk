@@ -28,3 +28,12 @@
   font-size: 13px;
   overflow-wrap: anywhere;
 }
+
+.note {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}

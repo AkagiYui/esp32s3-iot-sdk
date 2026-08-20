@@ -366,6 +366,7 @@ static cJSON *build_ota_json(void)
     cJSON_AddStringToObject(root, "running_partition", status.running_partition);
     cJSON_AddStringToObject(root, "boot_partition", status.boot_partition);
     cJSON_AddBoolToObject(root, "awaiting_confirm", status.awaiting_confirm);
+    cJSON_AddBoolToObject(root, "factory_available", status.factory_available);
     cJSON_AddNumberToObject(root, "max_image_size", (double)ota_service_max_image_size());
     return root;
 }
@@ -439,6 +440,38 @@ static esp_err_t system_ota_handler(httpd_req_t *req)
     default:
         return send_method_not_allowed(req, "GET, HEAD, POST");
     }
+}
+
+/**
+ * 回退到出厂基线镜像。
+ *
+ * 这是"救砖"通道，和 /api/system/factory-reset 不是一回事：后者清用户配置、不动固件，
+ * 这里换的是下次启动的固件、不动用户配置。
+ */
+static esp_err_t system_revert_factory_handler(httpd_req_t *req)
+{
+    if (req->method != HTTP_POST) {
+        return send_method_not_allowed(req, "POST");
+    }
+
+    esp_err_t err = ota_service_revert_to_factory();
+    if (err == ESP_ERR_NOT_FOUND) {
+        return send_error(req, 409, "no_factory_partition", "this partition layout has no factory image");
+    }
+    if (err == ESP_ERR_INVALID_STATE) {
+        return send_error(req, 409, "factory_image_invalid", "the factory image failed validation");
+    }
+    if (err != ESP_OK) {
+        return send_error(req, 500, "revert_failed", esp_err_to_name(err));
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "status", "reverting");
+    cJSON_AddStringToObject(root, "note", "rebooting into the factory image");
+    esp_err_t response = send_json(req, 202, root);
+
+    app_state_post_event(APP_EVENT_REBOOT);
+    return response;
 }
 
 static esp_err_t system_ota_confirm_handler(httpd_req_t *req)

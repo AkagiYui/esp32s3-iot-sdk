@@ -122,7 +122,8 @@ export function devApiMock(): Plugin {
     running_partition: "ota_0",
     boot_partition: otaState === "ready" ? "ota_1" : "ota_0",
     awaiting_confirm: false,
-    max_image_size: 3 * 1024 * 1024,
+    factory_available: true,
+    max_image_size: 2 * 1024 * 1024,
   });
 
   return {
@@ -172,6 +173,11 @@ export function devApiMock(): Plugin {
             otaState = "ready";
             json(otaStatus());
           }, 800);
+          return;
+        }
+
+        if (path === "/system/revert-to-factory" && method === "POST") {
+          json({ status: "reverting", note: "rebooting into the factory image" }, 202);
           return;
         }
 

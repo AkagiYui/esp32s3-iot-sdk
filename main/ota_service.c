@@ -6,6 +6,7 @@
 #include "esp_core_dump.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#include "esp_partition.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
@@ -280,6 +281,7 @@ void ota_service_get_status(ota_status_t *out)
         strlcpy(out->boot_partition, boot->label, sizeof(out->boot_partition));
     }
     out->awaiting_confirm = ota_service_awaiting_confirm();
+    out->factory_available = ota_service_has_factory();
 }
 
 esp_err_t ota_service_mark_valid(void)
@@ -301,6 +303,37 @@ esp_err_t ota_service_rollback(void)
 {
     ESP_LOGW(TAG, "rolling back to previous image");
     return esp_ota_mark_app_invalid_rollback_and_reboot();
+}
+
+static const esp_partition_t *find_factory_partition(void)
+{
+    return esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, NULL);
+}
+
+bool ota_service_has_factory(void)
+{
+    return find_factory_partition() != NULL;
+}
+
+esp_err_t ota_service_revert_to_factory(void)
+{
+    const esp_partition_t *factory = find_factory_partition();
+    if (factory == NULL) {
+        ESP_LOGE(TAG, "no factory partition in this layout");
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    /* esp_ota_set_boot_partition() 会先校验镜像，再把 otadata 擦掉，
+     * bootloader 下次启动就会落回 factory。 */
+    esp_err_t err = esp_ota_set_boot_partition(factory);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "revert to factory failed: %s", esp_err_to_name(err));
+        /* 把 OTA 层的错误码收敛掉，接口层不需要认识 esp_ota_ops 的枚举。 */
+        return err == ESP_ERR_OTA_VALIDATE_FAILED ? ESP_ERR_INVALID_STATE : err;
+    }
+
+    ESP_LOGW(TAG, "next boot will run the factory image");
+    return ESP_OK;
 }
 
 bool ota_service_has_coredump(void)

@@ -3,6 +3,7 @@ import {
   Bug,
   CircleCheck,
   HardDriveUpload,
+  PackageOpen,
   RefreshCw,
   RotateCw,
   Trash2,
@@ -21,6 +22,7 @@ import {
   eraseCoredump,
   fetchCoredump,
   fetchOtaStatus,
+  revertToFactory,
   uploadFirmware,
   validateFirmwareFile,
   type OtaStatus,
@@ -43,6 +45,7 @@ export default function FirmwarePage() {
   const [refreshing, setRefreshing] = createSignal(false);
   const [coredump, setCoredump] = createSignal(false);
   const [erasing, setErasing] = createSignal(false);
+  const [reverting, setReverting] = createSignal(false);
 
   let controller: AbortController | undefined;
 
@@ -123,6 +126,27 @@ export default function FirmwarePage() {
     }
   }
 
+  async function revert() {
+    const confirmed = await showConfirm(
+      "下次启动会运行出厂基线固件。已保存的 WiFi 配置和设备设置不受影响。",
+      "回退到出厂固件",
+      true,
+    );
+    if (confirmed !== "ok") {
+      return;
+    }
+
+    setReverting(true);
+    try {
+      await revertToFactory();
+      showToast("设备正在重启到出厂固件…", "warning");
+    } catch (error) {
+      showToast(describeError(error), "error");
+    } finally {
+      setReverting(false);
+    }
+  }
+
   async function reboot() {
     try {
       await rebootDevice();
@@ -193,6 +217,28 @@ export default function FirmwarePage() {
         />
         <InfoRow label="OTA 分区容量" value={formatBytes(status()?.max_image_size ?? 0)} />
       </Card>
+
+      <Show when={status()?.factory_available}>
+        <Card
+          icon={PackageOpen}
+          title="出厂基线"
+          subtitle="factory 分区里的镜像永远不会被 OTA 覆盖，是升级失败时的最后退路"
+        >
+          <p class={styles.note}>
+            与「恢复出厂设置」不是一回事：那个清空用户配置、不动固件；
+            这个换掉下次启动的固件、不动配置。
+          </p>
+          <Button
+            variant="danger"
+            icon={PackageOpen}
+            block
+            loading={reverting()}
+            onClick={() => void revert()}
+          >
+            回退到出厂固件
+          </Button>
+        </Card>
+      </Show>
 
       <Card
         icon={Bug}
