@@ -26,6 +26,8 @@ curl -fsSL https://vite.plus | bash
 | 前端单测 | `vp -C embed-web test` |
 | 前端开发服务器（自带设备 API 模拟层） | `vp -C embed-web dev` |
 | C 代码格式校验 | `clang-format --dry-run --Werror components/*/*.c components/*/include/*.h main/*.c main/*.h` |
+| C 代码静态分析 | `./tools/clang-check.sh`（需先 `idf.py build`） |
+| 查看/修改可调参数 | `idf.py menuconfig` → Kenko board / storage / settings / WiFi / time / web server |
 
 ## 约定
 

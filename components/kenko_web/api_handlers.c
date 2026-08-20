@@ -340,7 +340,8 @@ static esp_err_t system_info_handler(httpd_req_t *req)
     cJSON_AddItemToObject(root, "firmware", firmware);
 
     cJSON *runtime = cJSON_CreateObject();
-    cJSON_AddNumberToObject(runtime, "uptime_ms", (double)(esp_timer_get_time() / 1000));
+    /* esp_timer_get_time() 返回微秒，这里在浮点域上换算成毫秒。 */
+    cJSON_AddNumberToObject(runtime, "uptime_ms", (double)esp_timer_get_time() / 1000.0);
 
     cJSON *heap = cJSON_CreateObject();
     cJSON_AddItemToObject(heap, "internal", build_heap_json(HEAP_CAPS_INTERNAL));
@@ -547,10 +548,10 @@ static esp_err_t ota_upload(httpd_req_t *req)
         return send_error(req, 500, "no_memory", "out of memory");
     }
 
-    int remaining = req->content_len;
+    size_t remaining = (size_t)req->content_len;
     while (remaining > 0) {
-        int wanted = remaining < OTA_CHUNK_BYTES ? remaining : OTA_CHUNK_BYTES;
-        int received = httpd_req_recv(req, buffer, (size_t)wanted);
+        size_t wanted = remaining < OTA_CHUNK_BYTES ? remaining : (size_t)OTA_CHUNK_BYTES;
+        int received = httpd_req_recv(req, buffer, wanted);
         if (received == HTTPD_SOCK_ERR_TIMEOUT) {
             continue;
         }
@@ -567,7 +568,7 @@ static esp_err_t ota_upload(httpd_req_t *req)
             ota_service_get_status(&status);
             return send_error(req, 400, "image_rejected", status.message);
         }
-        remaining -= received;
+        remaining -= (size_t)received;
     }
     free(buffer);
 

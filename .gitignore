@@ -1,6 +1,8 @@
 # ESP-IDF 构建产物
 build/
 build-host/
+warnings.txt
+html_report/
 managed_components/
 
 # sdkconfig 是由 sdkconfig.defaults 生成的产物，真源是 sdkconfig.defaults

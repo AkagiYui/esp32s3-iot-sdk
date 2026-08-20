@@ -129,7 +129,7 @@ static esp_err_t send_file(httpd_req_t *req, const char *fs_path, const char *en
     char buffer[WEB_FILE_CHUNK_BYTES];
     size_t read_bytes;
     while ((read_bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-        if (httpd_resp_send_chunk(req, buffer, read_bytes) != ESP_OK) {
+        if (httpd_resp_send_chunk(req, buffer, (ssize_t)read_bytes) != ESP_OK) {
             fclose(file);
             /* 客户端提前断开时不再尝试补发终止块。 */
             return ESP_FAIL;

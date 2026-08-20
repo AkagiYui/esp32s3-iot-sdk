@@ -25,6 +25,7 @@
 - [x] BOOT 键长按进入配网（5s）或恢复出厂设置（10s）
 - [x] WS2812 状态灯指示当前系统状态，亮度可调
 - [x] 内置 Web 控制台：静态资源托管 + 完整 REST 接口
+- [x] 接口访问令牌：接入局域网后所有接口都需要鉴权
 - [x] WiFi 配置的读写、扫描与即时连接
 - [x] 设备设置持久化（设备名、时区、NTP 开关、状态灯亮度）
 - [x] SNTP 时间同步与时区设置
@@ -32,6 +33,7 @@
 - [x] 出厂基线固件（`factory` 分区），可一键回退，OTA 永不覆盖
 - [x] 重启与恢复出厂设置
 - [x] Coredump 落盘，Web 页面可查看与擦除，崩溃现场可事后分析
+- [x] 功能全部拆成可复用组件，参数全部走 Kconfig
 - [ ] 蓝牙配网或设备控制
 - [ ] MQTT 通信
 
@@ -89,6 +91,7 @@ REST 接口：
 | `POST /api/system/ota/confirm` | 确认当前镜像可用，取消回滚 |
 | `POST /api/system/revert-to-factory` | 下次启动切回出厂基线固件 |
 | `GET/DELETE /api/system/coredump` | 查询 / 擦除设备上保存的崩溃现场 |
+| `GET/POST /api/system/token` | 读取 / 重新生成接口访问令牌 |
 | `GET/PUT /api/settings` | 设备名、时区、NTP 开关、状态灯亮度 |
 | `GET /api/wifi/status` | 当前连接状态 |
 | `GET /api/wifi/scan` | 扫描附近热点（`?force=1` 跳过设备端缓存） |
@@ -97,6 +100,36 @@ REST 接口：
 | `POST /api/wifi/provision` | 重新进入配网模式 |
 
 错误一律返回 `{"error":{"code":"...","message":"..."}}`；未知的 `/api` 路径返回 `404` 而不是首页。
+
+### 访问令牌
+
+设备首次启动会生成一个 128 位随机令牌，存在配置分区里，并在串口日志中打印一次。
+
+- **配网模式下不校验**：此时设备开着无密码热点，用户手上还没有令牌，物理接近就是这一阶段的信任边界。前端会趁这个窗口自动把令牌取回来存进浏览器。
+- **接入局域网后所有 `/api/**` 都要求令牌**，通过 `Authorization: Bearer <token>` 或 `X-API-Token` 传递，否则返回 `401`。
+
+```bash
+curl -H "Authorization: Bearer <token>" http://kenko32-xxxx.local/api/system/info
+```
+
+令牌丢了有三条找回路径：从已授权的浏览器里复制（设置页可查看/复制/轮换）、看串口日志、
+或长按 BOOT 键 5 秒回到配网模式重新领取。
+
+> 鉴权不等于加密。设备用的是明文 HTTP，令牌在同一局域网内可被嗅探。
+> 要防重放与窃听需要 HTTPS，而自签证书在嵌入式设备上的体验很差，本项目没有做。
+
+### 固件签名（可选）
+
+鉴权挡住的是"未授权的人推固件"，挡不住"拿到令牌的人推恶意固件"。
+需要更强保证时可以开启镜像签名，OTA 时校验 RSA-3072 签名：
+
+```bash
+espsecure generate-signing-key --version 2 --scheme rsa3072 secure_boot_signing_key.pem
+idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.signed" fullclean build
+```
+
+私钥不要提交（已在 `.gitignore`）。它不防物理接触——bootloader 本身仍可被重新烧录，
+那需要真正的 Secure Boot 加 eFuse 烧写，且不可逆。
 
 > `GET /api/wifi/config` **不会回传明文密码**，只给出 `has_password`。
 > `PUT` 时把某条的 `password` 置为 `null` 即表示沿用设备上已保存的那一份。
@@ -197,35 +230,52 @@ vp -C embed-web dev
 cmake -S test/host -B build-host && cmake --build build-host && ctest --test-dir build-host
 ```
 
+静态分析（clang-tidy，需先构建过一次）：
+
+```bash
+./tools/clang-check.sh
+```
+
 前端：
 
 ```bash
 vp -C embed-web check && vp -C embed-web test
 ```
 
-## 目录结构
+## 项目结构
+
+功能实现全部在 `components/` 下，`main/` 只保留启动序列与状态机。
+组件之间不互相引用应用层：它们只往 `kenko_core` 的事件基投事件、从中读共享状态，
+所以每个组件都能被别的 ESP-IDF 项目单独拿去用。
 
 ```text
-main/                 # 固件源码
-  app_main.c          # 启动序列
-  app_state.c         # 状态机（boot / provisioning / connecting / online / offline）
-  wifi_manager.c      # STA 连接循环、SoftAP、异步扫描
-  wifi_config_store.c # 多组 WiFi 配置的持久化
-  settings_store.c    # 设备设置的持久化
-  web_server.c        # 静态资源服务
-  api_handlers.c      # REST 接口
-  ota_service.c       # OTA 写入、校验与回滚
-  time_sync.c         # SNTP 与时区
-  dns_captive.c       # captive portal 的 DNS 服务
-  status_led.c        # WS2812 状态灯
-  button_monitor.c    # BOOT 键长按
-  storage_fs.c        # LittleFS 挂载
-  device_info.c       # 启动时采集的硬件与固件身份
-  json_file.c         # 原子的 JSON 文件读写
-  http_utils.c        # 路径消毒、MIME、编码协商（纯逻辑，可 host 单测）
-  dns_message.c       # DNS 应答构造（纯逻辑，可 host 单测）
-  led_color.c         # HSV/RGB 与呼吸曲线（纯逻辑，可 host 单测）
-embed-web/            # 设备内置 Web 前端（SolidJS + Vite+）
-test/host/            # 固件纯逻辑模块的 host 端单测
-tools/                # 独立的硬件验证子项目（WS2812 点灯 / 跑马灯）
+components/
+  kenko_core/       事件基与共享运行状态（所有组件的公共依赖）
+  kenko_board/      设备身份、WS2812 状态灯、BOOT 键
+  kenko_storage/    LittleFS 挂载与配置文件的原子读写
+  kenko_settings/   设备设置与接口令牌的持久化
+  kenko_wifi/       STA 连接循环、配网 SoftAP、凭据存储、captive portal DNS
+  kenko_ota/        OTA 写入校验、出厂基线回退、崩溃现场
+  kenko_time/       SNTP 与时区
+  kenko_web/        静态资源服务与 REST 接口
+main/               启动序列（app_main.c）与状态机（app_state.c）
+embed-web/          设备内置 Web 前端（SolidJS + Vite+）
+test/host/          纯逻辑模块的 host 端单测
+tools/              clang-tidy 包装脚本、独立的硬件验证子项目
 ```
+
+### 可调参数走 Kconfig
+
+GPIO、端口、超时、任务栈与优先级、AP 地址、NTP 服务器等 40 余项都在各组件的
+`Kconfig` 里，换板子改 `idf.py menuconfig` 即可，不需要动源码：
+
+```text
+Kenko board      设备名前缀、WS2812 GPIO、按键 GPIO 与长按阈值
+Kenko storage    分区标签与挂载点
+Kenko settings   默认时区、默认亮度
+Kenko WiFi       AP 地址/信道、连接超时与退避、扫描缓存、省电模式、最大配置数
+Kenko time       NTP 服务器
+Kenko web server HTTP 端口、任务栈、请求体上限
+Kenko application 状态机任务栈与重启宽限
+```
+

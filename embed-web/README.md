@@ -179,6 +179,7 @@ src/
 | `POST /api/system/ota/confirm`       | 确认当前镜像，取消回滚                                   |
 | `POST /api/system/revert-to-factory` | 下次启动切回出厂基线固件                                 |
 | `GET/DELETE /api/system/coredump`    | 查询 / 擦除设备上保存的崩溃现场                          |
+| `GET/POST /api/system/token`         | 读取 / 重新生成接口访问令牌                              |
 | `GET/PUT /api/settings`              | 设备名、时区、NTP 开关、状态灯亮度                       |
 | `GET /api/wifi/status`               | 当前连接状态                                             |
 | `GET /api/wifi/scan`                 | 扫描附近热点（`?force=1` 跳过设备端缓存）                |
@@ -186,7 +187,11 @@ src/
 | `POST /api/wifi/connect`             | 用已保存的配置连接，关闭配网热点                         |
 | `POST /api/wifi/provision`           | 重新进入配网模式                                         |
 
-两条必须遵守的约定：
+三条必须遵守的约定：
+
+- **设备接入局域网后所有接口都需要令牌**，`lib/api.ts` 会自动带上
+  `Authorization: Bearer`；收到 `401` 时切到 `TokenGate` 闸门，而不是刷一屏请求失败。
+  配网模式下接口不校验，前端会趁这个窗口把令牌取回来存进 localStorage。
 
 - **设备永远不会回传明文 WiFi 密码**，`GET /api/wifi/config` 只给 `has_password`。
   因此前端把"未改动的密码"表示为 `null`，`PUT` 时原样送回，由设备沿用已保存的那一份。

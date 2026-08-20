@@ -102,6 +102,29 @@ jobs:
           idf.py build
           cmake --build build --target merged_bin
 
+      # clang-tidy 需要 build/compile_commands.json，所以必须排在构建之后
+      - name: Cache esp-clang
+        uses: actions/cache@v5
+        with:
+          path: /opt/esp/tools/esp-clang
+          key: esp-clang-idf-v6.0.2
+
+      - name: Static analysis (clang-tidy)
+        run: |
+          . "$IDF_PATH/export.sh"
+          python "$IDF_PATH/tools/idf_tools.py" install esp-clang
+          . "$IDF_PATH/export.sh"
+          ./tools/clang-check.sh
+
+      - name: Upload clang-tidy report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: clang-tidy-${{ github.sha }}
+          path: warnings.txt
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Collect release artifacts
         run: |
           PROJECT=$(python3 -c "import json; print(json.load(open('build/project_description.json'))['project_name'])")
